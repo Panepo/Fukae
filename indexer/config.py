@@ -1,0 +1,16 @@
+import os
+
+# --- From environment ---
+SERVER_TIMEOUT = float(os.getenv("SERVER_TIMEOUT", "180"))
+CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", "1024"))
+CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", "128"))
+VLM_TEMPERATURE = float(os.getenv("VLM_TEMPERATURE", "0.1"))
+VLM_MAX_TOKENS = int(os.getenv("VLM_MAX_TOKENS", "8192"))
+
+# --- Code-only constants (not in .env) ---
+VLM_CAPTION_MAX_TOKENS = 80
+VLM_SYNTHESIS_MAX_TOKENS = 1200
+MASSIVE_METRICS_PER_CHUNK = 40
+MASSIVE_COMPARISON_WINDOW = 4
+MASSIVE_COMPARISON_OVERLAP = 1
+MASSIVE_COMPARISON_MAX_METRICS = 36

@@ -25,7 +25,7 @@ class VLMInference:
             temperature=self.temperature
         )
 
-    def generate_response(self, messages: list = None, system_prompt: str = None, image_input: str = None, temperature: float = None) -> str:
+    def generate_response(self, messages: list = None, system_prompt: str = None, image_input: str = None, temperature: float = None, max_tokens: int = None) -> str:
         """
         Generate a response from the VLM based on the given messages or prompt.
 
@@ -34,6 +34,7 @@ class VLMInference:
             system_prompt (str, optional): System prompt to set context
             image_input (str, optional): Image input (URL or base64 encoded image)
             temperature (float, optional): Temperature for the VLM response
+            max_tokens (int, optional): Maximum tokens to generate
 
         Returns:
             str: The generated response
@@ -103,7 +104,10 @@ class VLMInference:
         effective_temperature = temperature if temperature is not None else self.temperature
 
         # Bind the temperature to the VLM and invoke
-        vlm_with_temperature = self.vlm.bind(temperature=effective_temperature)
+        bind_kwargs = {"temperature": effective_temperature}
+        if max_tokens is not None:
+            bind_kwargs["max_tokens"] = max_tokens
+        vlm_with_temperature = self.vlm.bind(**bind_kwargs)
         response = vlm_with_temperature.invoke(message_list)
 
         return response.content

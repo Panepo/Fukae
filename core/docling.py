@@ -1,4 +1,5 @@
 import os
+import json
 import time
 import httpx
 import mimetypes
@@ -12,11 +13,14 @@ load_dotenv()
 class DoclingInference:
     """Inference class for interacting with the Docling API server."""
 
-    def __init__(self):
+    def __init__(self, timeout: float = None):
         """Initialize the Docling inference class with server configuration."""
         # Remove trailing slash from base_url if present to avoid double slashes in URLs
         self.base_url = os.getenv("DOCLING_BASE_URL", "").rstrip("/")
         self.headers = {}
+        if timeout is None:
+            timeout = float(os.getenv("SERVER_TIMEOUT", "180"))
+        self.timeout = timeout
         # Note: Docling server uses DOCLING_SERVE_API_KEY for authentication if set
 
     def _get_content_type_from_name(self, filename: str) -> str:
@@ -74,10 +78,37 @@ class DoclingInference:
                 }
             }
 
-        with httpx.Client() as client:
+        with httpx.Client(timeout=self.timeout) as client:
             response = client.post(url, json=payload, headers=self.headers)
             response.raise_for_status()
             return response.json()
+
+    def convert_file(self, path: str, to_formats: list = None, **options) -> Dict[str, Any]:
+        """
+        Convert a local file via multipart upload to /v1/convert/file.
+
+        Args:
+            path: Local file path to upload.
+            to_formats: Output formats, e.g. ["md", "json"].
+            **options: Extra conversion options forwarded in the JSON options field.
+
+        Returns:
+            API response dict.  Callers access ["documents"][0]["md_content"] or
+            ["documents"][0]["json_content"] depending on the requested format.
+        """
+        if to_formats is None:
+            to_formats = ["md"]
+
+        url = f"{self.base_url}/v1/convert/file"
+        content_type = self._get_content_type_from_name(path)
+
+        with open(path, "rb") as f:
+            files = {"files": (Path(path).name, f, content_type)}
+            data = {"options": json.dumps({"to_formats": to_formats, **options})}
+            with httpx.Client(timeout=self.timeout) as client:
+                response = client.post(url, files=files, data=data, headers=self.headers)
+                response.raise_for_status()
+                return response.json()
 
     def convert_document_async(self, source: str, to_formats: list = None, **options) -> str:
         """
@@ -119,7 +150,7 @@ class DoclingInference:
                 }
             }
 
-        with httpx.Client() as client:
+        with httpx.Client(timeout=self.timeout) as client:
             response = client.post(url, json=payload, headers=self.headers)
             response.raise_for_status()
             task_data = response.json()
@@ -137,7 +168,7 @@ class DoclingInference:
         """
         url = f"{self.base_url}/v1/status/poll/{task_id}"
 
-        with httpx.Client() as client:
+        with httpx.Client(timeout=self.timeout) as client:
             response = client.get(url, headers=self.headers)
             response.raise_for_status()
             return response.json()
@@ -154,7 +185,7 @@ class DoclingInference:
         """
         url = f"{self.base_url}/v1/result/{task_id}"
 
-        with httpx.Client() as client:
+        with httpx.Client(timeout=self.timeout) as client:
             response = client.get(url, headers=self.headers)
             response.raise_for_status()
             return response.json()

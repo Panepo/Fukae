@@ -23,7 +23,7 @@ class LLMInference:
             temperature=self.temperature
         )
 
-    def generate_response(self, messages: list = None, system_prompt: str = None, temperature: float = None) -> str:
+    def generate_response(self, messages: list = None, system_prompt: str = None, temperature: float = None, max_tokens: int = None) -> str:
         """
         Generate a response from the LLM based on the given messages or prompt.
 
@@ -31,6 +31,7 @@ class LLMInference:
             messages (list, optional): List of messages including chat history and tool messages
             system_prompt (str, optional): System prompt to set context
             temperature (float, optional): Temperature for the LLM response
+            max_tokens (int, optional): Maximum tokens to generate
 
         Returns:
             str: The generated response
@@ -69,7 +70,10 @@ class LLMInference:
         effective_temperature = temperature if temperature is not None else self.temperature
 
         # Bind the temperature to the LLM and invoke
-        llm_with_temperature = self.llm.bind(temperature=effective_temperature)
+        bind_kwargs = {"temperature": effective_temperature}
+        if max_tokens is not None:
+            bind_kwargs["max_tokens"] = max_tokens
+        llm_with_temperature = self.llm.bind(**bind_kwargs)
         response = llm_with_temperature.invoke(message_list)
 
         return response.content

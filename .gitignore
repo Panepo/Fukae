@@ -181,13 +181,6 @@ cython_debug/
 .cursorindexingignore
 
 # Custom
-ragdata/*
-data/*
-!ragdata/settings.yaml
-models/*
 .github/reference/*
-!.github/reference/*.md
-tests/questions/*
-tests/archive/*
-*secret*
-certs
+tests/*.pdf
+
