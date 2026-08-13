@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Document Indexer - Upload</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+
+<body>
+  <div class="container">
+    <h1>Document Indexer</h1>
+    <p>Upload documents to generate embedded chunks.</p>
+
+    <form id="uploadForm" enctype="multipart/form-data">
+      <div class="form-group">
+        <label for="files">Select files to upload:</label>
+        <input type="file" id="files" name="files" multiple
+          accept=".pdf,.docx,.doc,.odt,.rtf,.html,.htm,.xlsx,.xls,.csv,.pptx,.ppt,.json,.png,.jpg,.jpeg,.gif,.bmp,.tiff,.webp,.md,.txt">
+      </div>
+      <button type="submit" id="uploadButton">Upload and Process</button>
+    </form>
+
+    <div id="progressContainer" class="hidden">
+      <h3>Processing Status</h3>
+      <div id="progressList"></div>
+    </div>
+
+    <div id="resultsContainer" class="hidden">
+      <h3>Results</h3>
+      <div id="resultsList"></div>
+    </div>
+  </div>
+
+  <script>
+    document.getElementById('uploadForm').addEventListener('submit', async function (e) {
+      e.preventDefault();
+
+      const files = document.getElementById('files').files;
+      if (files.length === 0) {
+        alert('Please select at least one file to upload.');
+        return;
+      }
+
+      // Show progress container
+      document.getElementById('progressContainer').classList.remove('hidden');
+      document.getElementById('resultsContainer').classList.add('hidden');
+
+      const progressList = document.getElementById('progressList');
+      progressList.innerHTML = '';
+
+      // Process each file
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const fileId = `file-${i}`;
+
+        // Create progress item
+        const progressItem = document.createElement('div');
+        progressItem.className = 'progress-item';
+        progressItem.id = `progress-${fileId}`;
+        progressItem.innerHTML = `
+                    <p><strong>${file.name}</strong></p>
+                    <div class="progress-bar">
+                        <div class="progress-fill" style="width: 0%">0%</div>
+                    </div>
+                    <p class="status">Pending...</p>
+                `;
+        progressList.appendChild(progressItem);
+
+        // Create form data for upload
+        const formData = new FormData();
+        formData.append('file', file);
+
+        try {
+          // Upload file
+          const uploadResponse = await fetch('/upload/web', {
+            method: 'POST',
+            body: formData
+          });
+
+          const uploadData = await uploadResponse.json();
+          const taskId = uploadData.task_id;
+
+          // Update status to processing
+          const statusElement = progressItem.querySelector('.status');
+          statusElement.textContent = 'Processing...';
+
+          // Poll for status
+          await pollTaskStatus(taskId, fileId);
+
+        } catch (error) {
+          const statusElement = progressItem.querySelector('.status');
+          statusElement.textContent = `Error: ${error.message}`;
+          progressItem.querySelector('.progress-fill').style.backgroundColor = 'red';
+        }
+      }
+
+      // Show results container after all files are processed
+      document.getElementById('resultsContainer').classList.remove('hidden');
+    });
+
+    async function pollTaskStatus(taskId, fileId) {
+      const progressItem = document.getElementById(`progress-${fileId}`);
+      const progressFill = progressItem.querySelector('.progress-fill');
+      const statusElement = progressItem.querySelector('.status');
+
+      while (true) {
+        try {
+          const response = await fetch(`/status/${taskId}`, {
+            headers: {
+              'Authorization': `Bearer pat_me_sw_fukae`
+            }
+          });
+
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+
+          const data = await response.json();
+
+          // Update progress
+          if (data.progress !== null && data.progress !== undefined) {
+            progressFill.style.width = `${data.progress}%`;
+            progressFill.textContent = `${data.progress}%`;
+          }
+
+          // Check status
+          if (data.status === 'completed') {
+            statusElement.textContent = 'Completed!';
+            progressFill.style.backgroundColor = 'green';
+
+            // Add to results
+            addResultToList(data.result);
+            break;
+          } else if (data.status === 'failed') {
+            statusElement.textContent = `Failed: ${data.error}`;
+            progressFill.style.backgroundColor = 'red';
+            break;
+          } else if (data.status === 'processing') {
+            statusElement.textContent = 'Processing...';
+          }
+
+          // Wait before polling again
+          await new Promise(resolve => setTimeout(resolve, 1000));
+
+        } catch (error) {
+          statusElement.textContent = `Error: ${error.message}`;
+          progressFill.style.backgroundColor = 'red';
+          break;
+        }
+      }
+    }
+
+    async function downloadChunks(docStem) {
+      const response = await fetch(`/download/chunks/${docStem}_chunks.json`, {
+        headers: { 'Authorization': 'Bearer pat_me_sw_fukae' }
+      });
+      if (!response.ok) {
+        alert(`Download failed: ${response.status} ${response.statusText}`);
+        return;
+      }
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${docStem}_chunks.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    function addResultToList(result) {
+      const resultsList = document.getElementById('resultsList');
+      const resultItem = document.createElement('div');
+      resultItem.className = 'result-item';
+      resultItem.innerHTML = `
+                <p><strong>${result.doc_stem}</strong></p>
+                <p>Chunks: ${result.chunks_count}</p>
+                <p>Output file: <a href="#" onclick="downloadChunks('${result.doc_stem}'); return false;">Download JSON</a></p>
+            `;
+      resultsList.appendChild(resultItem);
+    }
+  </script>
+</body>
+
+</html>

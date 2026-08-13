@@ -183,4 +183,5 @@ cython_debug/
 # Custom
 .github/reference/*
 tests/*.pdf
-
+uploads/*.*
+chunks/*.*
