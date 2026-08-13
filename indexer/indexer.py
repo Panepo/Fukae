@@ -1,4 +1,4 @@
-"""DocumentIndexer — orchestrates all five indexer stages."""
+"""DocumentIndexer — orchestrates all six indexer stages."""
 
 import tempfile
 from concurrent.futures import ThreadPoolExecutor
@@ -8,7 +8,7 @@ from core.docling import DoclingInference
 from core.llm import LLMInference
 from core.vlm import VLMInference
 from indexer.config import SERVER_TIMEOUT, CHUNK_SIZE, CHUNK_OVERLAP, VLM_TEMPERATURE
-from indexer import stage1_parse, stage2_tables, stage3_vision, stage4_chunk, stage5_metadata
+from indexer import stage1_parse, stage2_tables, stage3_vision, stage4_chunk, stage5_metadata, stage6_embed
 from indexer.chunk_utils import _build_rcts
 from indexer.metadata_utils import _detect_language, _chunk_hash
 
@@ -60,7 +60,12 @@ class DocumentIndexer:
         all_exts = _PASSTHROUGH_EXTENSIONS | _PIPELINE_EXTENSIONS
         for path in sorted(base.glob(pattern)):
             if path.is_file() and path.suffix.lower() in all_exts:
-                all_chunks.extend(self.load(str(path)))
+                result = self.load(str(path))
+                # If result is a dict with 'chunks' key, extract the chunks
+                if isinstance(result, dict) and "chunks" in result:
+                    all_chunks.extend(result["chunks"])
+                else:
+                    all_chunks.extend(result)
         return all_chunks
 
     # ------------------------------------------------------------------
@@ -91,12 +96,13 @@ class DocumentIndexer:
             })
         return chunks
 
-    def _load_pipeline(self, path: str) -> list[dict]:
-        """Full five-stage pipeline; stages 2 and 3 run in parallel."""
+    def _load_pipeline(self, path: str) -> dict:
+        """Full six-stage pipeline; stages 2 and 3 run in parallel."""
         source = Path(path).name
         doc_stem = Path(path).stem
 
         with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
             # Stage 1
             elements, pic_info = stage1_parse.parse(path, tmp_dir, self.docling)
 
@@ -117,4 +123,7 @@ class DocumentIndexer:
             )
 
             # Stage 5
-            return stage5_metadata.enrich_metadata(text_chunks, table_chunks, source)
+            enriched_chunks = stage5_metadata.enrich_metadata(text_chunks, table_chunks, source)
+
+            # Stage 6
+            return stage6_embed.generate_embeddings(enriched_chunks, source, tmp_path)

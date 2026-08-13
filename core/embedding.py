@@ -20,17 +20,23 @@ class EmbeddingInference:
             openai_api_key=self.api_key
         )
 
-    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+    def embed_documents(self, texts: list[str], batch_size: int = 32) -> list[list[float]]:
         """
         Embed a list of documents.
 
         Args:
             texts (list[str]): List of text documents to embed
+            batch_size (int): Maximum number of documents to embed in a single request
 
         Returns:
             list[list[float]]: List of embedding vectors
         """
-        return self.embeddings.embed_documents(texts)
+        all_embeddings = []
+        for i in range(0, len(texts), batch_size):
+            batch_texts = texts[i:i + batch_size]
+            batch_embeddings = self.embeddings.embed_documents(batch_texts)
+            all_embeddings.extend(batch_embeddings)
+        return all_embeddings
 
     def embed_query(self, text: str) -> list[float]:
         """

@@ -14,7 +14,8 @@ from indexer.indexer import DocumentIndexer, _PASSTHROUGH_EXTENSIONS, _PIPELINE_
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Index documents using the DocumentIndexer pipeline."
+        description="Index documents using the DocumentIndexer pipeline.",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument(
         "input",
@@ -60,14 +61,17 @@ def main():
     try:
         if input_path.is_file():
             print(f"Processing file: {input_path.name}")
-            chunks = indexer.load(str(input_path))
+            embedded_data = indexer.load(str(input_path))
 
-            # Output results
+            # Output results in reference.json format
             output_filename = f"{input_path.stem}_chunks.json"
             output_path = output_folder / output_filename
+
+            # embedded_data is now a dict with 'model', 'dimension', 'device', 'doc_stem', 'chunks'
+            # Write the embedded data structure in reference.json format
             with open(output_path, "w", encoding="utf-8") as f:
-                json.dump(chunks, f, indent=2, ensure_ascii=False)
-            print(f"Chunks saved to: {output_path} ({len(chunks)} chunks)")
+                json.dump(embedded_data, f, indent=2, ensure_ascii=False)
+            print(f"Chunks saved to: {output_path} ({len(embedded_data.get('chunks', []))} chunks)")
 
         elif input_path.is_dir():
             print(f"Processing directory: {input_path}")
@@ -81,14 +85,17 @@ def main():
 
             for file_path in files_to_process:
                 print(f"Processing file: {file_path.name}")
-                chunks = indexer.load(str(file_path))
+                embedded_data = indexer.load(str(file_path))
 
-                # Output results
+                # Output results in reference.json format
                 output_filename = f"{file_path.stem}_chunks.json"
                 output_path = output_folder / output_filename
+
+                # embedded_data is now a dict with 'model', 'dimension', 'device', 'doc_stem', 'chunks'
+                # Write the embedded data structure in reference.json format
                 with open(output_path, "w", encoding="utf-8") as f:
-                    json.dump(chunks, f, indent=2, ensure_ascii=False)
-                print(f"  -> Chunks saved to: {output_path} ({len(chunks)} chunks)")
+                    json.dump(embedded_data, f, indent=2, ensure_ascii=False)
+                print(f"  -> Chunks saved to: {output_path} ({len(embedded_data.get('chunks', []))} chunks)")
 
         else:
             print(f"Error: Input path '{args.input}' is neither a file nor a directory.", file=sys.stderr)

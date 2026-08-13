@@ -1,10 +1,20 @@
 """Stage 2 — Tables: convert table elements into table_chunks via LLM narration."""
 
+import logging
+import sys
+
 from indexer.table_utils import (
     _serialize_massive_table_chunks,
     _table_to_markdown,
     _detect_table_type,
 )
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    handlers=[logging.StreamHandler(sys.stdout)],
+)
+log = logging.getLogger(__name__)
 
 _NARRATE_SYSTEM = (
     "You are a technical document analyst. "
@@ -45,6 +55,7 @@ def process_tables(elements: list, doc_stem: str, llm) -> list:
     list of table chunk dicts (without chunk_id / language / chunk_hash —
     those are added in stage5_metadata)
     """
+    log.info(f"Processing tables for document: {doc_stem}")
     table_chunks: list[dict] = []
 
     for el in elements:
@@ -58,12 +69,14 @@ def process_tables(elements: list, doc_stem: str, llm) -> list:
         # --- Massive strategy (always first) ---
         massive = _serialize_massive_table_chunks(el, doc_stem)
         if massive:
+            log.info(f"Processed massive table for document: {doc_stem}")
             table_chunks.extend(massive)
             continue
 
         # --- Determine type and narrate ---
         table_type = _detect_table_type(el)
         narration = _narrate_table(el, table_type, doc_stem, llm)
+        log.info(f"Processed table type '{table_type}' for document: {doc_stem}")
 
         table_chunks.append({
             "chunk_type": f"table_{table_type}",

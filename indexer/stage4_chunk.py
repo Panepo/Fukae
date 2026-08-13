@@ -1,5 +1,8 @@
 """Stage 4 — Chunk: split text/picture elements into text_chunks."""
 
+import logging
+import sys
+
 from indexer.chunk_utils import (
     _build_context_prefix,
     _build_rcts,
@@ -7,6 +10,13 @@ from indexer.chunk_utils import (
     _merge_short_text_chunks,
     _merge_warning_headers,
 )
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    handlers=[logging.StreamHandler(sys.stdout)],
+)
+log = logging.getLogger(__name__)
 
 
 def chunk_text(
@@ -34,6 +44,7 @@ def chunk_text(
     -------
     list of text chunk dicts (chunk_text_original, chunk_text_embedded, page, section)
     """
+    log.info(f"Chunking text for document: {doc_stem} (chunk_size={chunk_size}, overlap={chunk_overlap})")
     splitter = _build_rcts(chunk_size, chunk_overlap)
 
     # Materialise picture elements as text, drop tables
@@ -54,6 +65,8 @@ def chunk_text(
                 })
         else:
             processed.append(el)
+
+    log.info(f"Processed {len(processed)} elements for chunking")
 
     text_chunks: list[dict] = []
     groups = _group_elements(processed)
@@ -91,4 +104,5 @@ def chunk_text(
                 "section": chunk["section"],
             })
 
+    log.info(f"Generated {len(text_chunks)} text chunks for document: {doc_stem}")
     return text_chunks

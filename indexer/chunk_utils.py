@@ -13,7 +13,7 @@ def _build_context_prefix(section: str, doc_stem: str) -> str:
     parts = [f"Document: {doc_stem}"]
     if section:
         parts.append(f"Section: {section}")
-    return " | ".join(parts) + "\n"
+    return "[" + " | ".join(parts) + "]\n"
 
 
 def _build_rcts(chunk_size: int, chunk_overlap: int) -> RecursiveCharacterTextSplitter:

@@ -4,10 +4,19 @@ import os
 import base64
 import csv
 import json
+import logging
 import mimetypes
+import sys
 import tempfile
 from pathlib import Path
 from typing import Any
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    handlers=[logging.StreamHandler(sys.stdout)],
+)
+log = logging.getLogger(__name__)
 
 # Optional heavy dependencies (graceful fallback when absent)
 try:
@@ -52,6 +61,7 @@ def parse(path: str, tmp_dir: str, docling) -> tuple[list[dict], list[dict]]:
     elements : list of element dicts (type, text, page, section, …)
     pic_info : list of picture metadata dicts
     """
+    log.info(f"Parsing document: {path}")
     suffix = Path(path).suffix.lower()
 
     if suffix in _DOCLING_EXTENSIONS:
@@ -75,6 +85,7 @@ def parse(path: str, tmp_dir: str, docling) -> tuple[list[dict], list[dict]]:
 # ---------------------------------------------------------------------------
 
 def _parse_via_docling(path: str, tmp_dir: str, docling) -> tuple[list, list]:
+    log.info(f"Parsing via Docling: {path}")
     result = docling.convert_file(path, to_formats=["md", "json"])
 
     # Normalise the response envelope (docling-serve returns {"documents": [...]} or {"document": ...})
@@ -98,6 +109,7 @@ def _parse_via_docling(path: str, tmp_dir: str, docling) -> tuple[list, list]:
 
 def _parse_docling_json(doc_json: dict, tmp_dir: str) -> tuple[list, list]:
     """Parse a DoclingDocument JSON into elements + pic_info."""
+    log.info("Parsing Docling JSON content")
     elements: list[dict] = []
     pic_info: list[dict] = []
 

@@ -1,6 +1,16 @@
 """Stage 5 — Metadata: assign chunk_id, language, chunk_hash and unify all chunks."""
 
+import logging
+import sys
+
 from indexer.metadata_utils import _detect_language, _chunk_hash
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    handlers=[logging.StreamHandler(sys.stdout)],
+)
+log = logging.getLogger(__name__)
 
 
 def enrich_metadata(text_chunks: list, table_chunks: list, source: str) -> list:
@@ -15,6 +25,7 @@ def enrich_metadata(text_chunks: list, table_chunks: list, source: str) -> list:
     Additional fields for table chunks:
         chunk_text_raw, ocr_difficulty, rows, cols, table_type
     """
+    log.info(f"Enriching metadata for {len(text_chunks)} text chunks and {len(table_chunks)} table chunks from source: {source}")
     result: list[dict] = []
 
     for idx, chunk in enumerate(text_chunks):
@@ -52,4 +63,5 @@ def enrich_metadata(text_chunks: list, table_chunks: list, source: str) -> list:
             "ocr_difficulty": chunk.get("ocr_difficulty", "low"),
         })
 
+    log.info(f"Completed metadata enrichment. Total unified chunks: {len(result)}")
     return result
