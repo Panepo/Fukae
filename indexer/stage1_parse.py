@@ -30,6 +30,7 @@ _EXCEL_EXTENSIONS = {".xlsx", ".xls"}
 _CSV_EXTENSIONS = {".csv"}
 _PPTX_EXTENSIONS = {".pptx", ".ppt"}
 _JSON_EXTENSIONS = {".json"}
+_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".tiff", ".webp"}
 
 
 # ---------------------------------------------------------------------------
@@ -63,6 +64,8 @@ def parse(path: str, tmp_dir: str, docling) -> tuple[list[dict], list[dict]]:
         return _parse_pptx(path, tmp_dir)
     if suffix in _JSON_EXTENSIONS:
         return _parse_json(path)
+    if suffix in _IMAGE_EXTENSIONS:
+        return _parse_image(path, tmp_dir)
     # Fallback: treat as plain text
     return _parse_plaintext(path)
 
@@ -341,6 +344,50 @@ def _rows_to_table_data(rows: list[list[str]]) -> dict:
                 "row_header": False,
             })
     return {"num_rows": num_rows, "num_cols": num_cols, "table_cells": cells}
+
+
+# ---------------------------------------------------------------------------
+# Image parser
+# ---------------------------------------------------------------------------
+
+def _parse_image(path: str, tmp_dir: str) -> tuple[list, list]:
+    """Parse an image file into a picture element and pic_info."""
+    # Determine mime type
+    mime_type, _ = mimetypes.guess_type(path)
+    if mime_type is None:
+        mime_type = "image/png"
+
+    # Read image file
+    with open(path, "rb") as fh:
+        image_data = fh.read()
+
+    # Save to tmp_dir
+    safe_name = Path(path).name.replace(" ", "_").replace("/", "_").replace("#", "")
+    out_path = os.path.join(tmp_dir, safe_name)
+    with open(out_path, "wb") as fh:
+        fh.write(image_data)
+
+    # Create element and pic_info
+    element_id = f"picture_{Path(path).stem}"
+
+    pic_info = [{
+        "element_id": element_id,
+        "image_path": out_path,
+        "page": 0,
+        "section": "Image",
+        "caption": "",
+        "mime_type": mime_type,
+    }]
+
+    elements = [{
+        "type": "picture",
+        "text": "",
+        "page": 0,
+        "section": "Image",
+        "element_id": element_id,
+    }]
+
+    return elements, pic_info
 
 
 # ---------------------------------------------------------------------------

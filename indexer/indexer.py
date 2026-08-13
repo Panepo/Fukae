@@ -17,6 +17,7 @@ _PIPELINE_EXTENSIONS = {
     ".pdf", ".docx", ".doc", ".odt", ".rtf",
     ".html", ".htm", ".xlsx", ".xls", ".csv",
     ".pptx", ".ppt", ".json",
+    ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".tiff", ".webp",
 }
 
 
