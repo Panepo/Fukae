@@ -38,9 +38,9 @@ class TaskManager:
         try:
             self.update_task_status(task_id, TaskStatus.PROCESSING, progress=10)
 
-            # Process the document using the indexer
+            # Process the document using the indexer in a thread pool to avoid blocking the async event loop
             # stage6_embed.generate_embeddings already saves the file to output_dir
-            result = self.indexer.load(str(file_path))
+            result = await asyncio.to_thread(self.indexer.load, str(file_path))
 
             self.update_task_status(task_id, TaskStatus.PROCESSING, progress=50)
 
@@ -49,10 +49,17 @@ class TaskManager:
             output_filename = f"{doc_stem}_chunks.json"
             output_path = output_dir / output_filename
 
+            # Handle both dict (pipeline) and list (passthrough) return types
+            chunks_count = 0
+            if isinstance(result, dict):
+                chunks_count = len(result.get("chunks", []))
+            elif isinstance(result, list):
+                chunks_count = len(result)
+
             self.update_task_status(task_id, TaskStatus.COMPLETED, progress=100, result={
                 "doc_stem": doc_stem,
                 "output_file": str(output_path),
-                "chunks_count": len(result.get("chunks", []))
+                "chunks_count": chunks_count
             })
 
         except Exception as e:
