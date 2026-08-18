@@ -15,11 +15,15 @@
 
     <form id="uploadForm" enctype="multipart/form-data">
       <div class="form-group">
+        <label for="bearerToken">Bearer Token:</label>
+        <input type="text" id="bearerToken" name="bearerToken" value="" placeholder="Enter bearer token">
+      </div>
+      <div class="form-group">
         <label for="files">Select files to upload:</label>
         <input type="file" id="files" name="files" multiple
           accept=".pdf,.docx,.doc,.odt,.rtf,.html,.htm,.xlsx,.xls,.csv,.pptx,.ppt,.json,.png,.jpg,.jpeg,.gif,.bmp,.tiff,.webp,.md,.txt">
       </div>
-      <button type="submit" id="uploadButton">Upload and Process</button>
+      <button type="submit" id="uploadButton" disabled>Upload and Process</button>
     </form>
 
     <div id="progressContainer" class="hidden">
@@ -34,6 +38,26 @@
   </div>
 
   <script>
+    let currentAuthToken = '';
+
+    // Enable/disable upload button based on bearer token input
+    const bearerTokenInput = document.getElementById('bearerToken');
+    const uploadButton = document.getElementById('uploadButton');
+
+    function checkBearerToken() {
+      if (bearerTokenInput.value.trim() !== '') {
+        uploadButton.disabled = false;
+      } else {
+        uploadButton.disabled = true;
+      }
+    }
+
+    // Initial check
+    checkBearerToken();
+
+    // Add event listener to bearer token input
+    bearerTokenInput.addEventListener('input', checkBearerToken);
+
     document.getElementById('uploadForm').addEventListener('submit', async function (e) {
       e.preventDefault();
 
@@ -42,6 +66,10 @@
         alert('Please select at least one file to upload.');
         return;
       }
+
+      // Get bearer token from input
+      const bearerTokenInput = document.getElementById('bearerToken').value.trim();
+      currentAuthToken = bearerTokenInput ? `Bearer ${bearerTokenInput}` : '';
 
       // Show progress container
       document.getElementById('progressContainer').classList.remove('hidden');
@@ -74,8 +102,13 @@
 
         try {
           // Upload file
+          const uploadHeaders = {};
+          if (currentAuthToken) {
+            uploadHeaders['Authorization'] = currentAuthToken;
+          }
           const uploadResponse = await fetch('/upload/web', {
             method: 'POST',
+            headers: uploadHeaders,
             body: formData
           });
 
@@ -107,10 +140,12 @@
 
       while (true) {
         try {
+          const headers = {};
+          if (currentAuthToken) {
+            headers['Authorization'] = currentAuthToken;
+          }
           const response = await fetch(`/status/${taskId}`, {
-            headers: {
-              'Authorization': `Bearer pat_me_sw_fukae`
-            }
+            headers: headers
           });
 
           if (!response.ok) {
@@ -153,8 +188,12 @@
     }
 
     async function downloadChunks(docStem) {
+      const headers = {};
+      if (currentAuthToken) {
+        headers['Authorization'] = currentAuthToken;
+      }
       const response = await fetch(`/download/chunks/${docStem}_chunks.json`, {
-        headers: { 'Authorization': 'Bearer pat_me_sw_fukae' }
+        headers: headers
       });
       if (!response.ok) {
         alert(`Download failed: ${response.status} ${response.statusText}`);

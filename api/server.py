@@ -28,7 +28,6 @@ load_dotenv()
 BEARER_KEY = os.getenv("BEARER_KEY") or ""
 
 def verify_bearer_key(request: Request):
-    return True
     auth_header = request.headers.get("Authorization")
     if not auth_header or not auth_header.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Missing or invalid Authorization header")

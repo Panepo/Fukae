@@ -123,7 +123,9 @@ class DocumentIndexer:
             )
 
             # Stage 5
-            enriched_chunks = stage5_metadata.enrich_metadata(text_chunks, table_chunks, source)
+            enriched_chunks = stage5_metadata.enrich_metadata(text_chunks, table_chunks, source, self.llm)
 
-            # Stage 6
-            return stage6_embed.generate_embeddings(enriched_chunks, source, tmp_path)
+            # Stage 6 - save to chunks folder
+            chunks_dir = Path(__file__).parent.parent / "chunks"
+            chunks_dir.mkdir(parents=True, exist_ok=True)
+            return stage6_embed.generate_embeddings(enriched_chunks, source, chunks_dir)

@@ -28,4 +28,4 @@ link-mode = "copy"
 
 [tool.poe.tasks]
 install = "uv pip install -r requirements.txt"
-dev = "python scripts/run_api_server.py"
+dev = "python main.py"

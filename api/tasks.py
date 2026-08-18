@@ -39,18 +39,15 @@ class TaskManager:
             self.update_task_status(task_id, TaskStatus.PROCESSING, progress=10)
 
             # Process the document using the indexer
+            # stage6_embed.generate_embeddings already saves the file to output_dir
             result = self.indexer.load(str(file_path))
 
             self.update_task_status(task_id, TaskStatus.PROCESSING, progress=50)
 
-            # Save the results to the output directory
+            # Update task status with the result info
             doc_stem = file_path.stem
             output_filename = f"{doc_stem}_chunks.json"
             output_path = output_dir / output_filename
-
-            import json
-            with open(output_path, "w", encoding="utf-8") as f:
-                json.dump(result, f, indent=2, ensure_ascii=False)
 
             self.update_task_status(task_id, TaskStatus.COMPLETED, progress=100, result={
                 "doc_stem": doc_stem,
