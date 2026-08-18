@@ -1,0 +1,39 @@
+services:
+  fukae:
+    image: fukae:latest
+    container_name: fukae
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - docling-serve
+    environment:
+      - BEARER_KEY=${BEARER_KEY}
+      - CHAT_MODEL=${CHAT_MODEL}
+      - CHAT_BASE_URL=${CHAT_BASE_URL}
+      - CHAT_API_KEY=${CHAT_API_KEY}
+      - ROUTER_MODEL=${ROUTER_MODEL}
+      - ROUTER_BASE_URL=${ROUTER_BASE_URL}
+      - ROUTER_API_KEY=${ROUTER_API_KEY}
+      - VISION_CHAT_MODEL=${VISION_CHAT_MODEL}
+      - VISION_CHAT_BASE_URL=${VISION_CHAT_BASE_URL}
+      - VISION_CHAT_API_KEY=${VISION_CHAT_API_KEY}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL}
+      - EMBEDDING_BASE_URL=${EMBEDDING_BASE_URL}
+      - EMBEDDING_API_KEY=${EMBEDDING_API_KEY}
+      - RERANKING_MODEL=${RERANKING_MODEL}
+      - RERANKING_BASE_URL=${RERANKING_BASE_URL}
+      - RERANKING_API_KEY=${RERANKING_API_KEY}
+      - DOCLING_BASE_URL=${DOCLING_BASE_URL}
+      - SERVER_TIMEOUT=${SERVER_TIMEOUT}
+      - CHUNK_SIZE=${CHUNK_SIZE}
+      - CHUNK_OVERLAP=${CHUNK_OVERLAP}
+      - VLM_TEMPERATURE=${VLM_TEMPERATURE}
+      - VLM_MAX_TOKENS=${VLM_MAX_TOKENS}
+    volumes:
+      - ./fukae-chunks:/app/chunks
+      - ./fukae-uploads:/app/uploads
+    extra_hosts:
+      - host.docker.internal:host-gateway
+
