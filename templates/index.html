@@ -5,7 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Document Indexer - Upload</title>
-  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="../static/style.css">
 </head>
 
 <body>
@@ -38,6 +38,15 @@
   </div>
 
   <script>
+    // Determine the base path for API calls and static files
+    // If deployed under a subpath like /fukae/, this will be '/fukae'
+    const currentPath = window.location.pathname;
+    const pathParts = currentPath.split('/').filter(p => p.length > 0);
+    let basePath = '';
+    // If the first part is not one of the app's direct routes, it's a subpath
+    if (pathParts.length > 0 && !['upload', 'status', 'download', 'static', 'chunks'].includes(pathParts[0])) {
+      basePath = '/' + pathParts[0];
+    }
     let currentAuthToken = '';
 
     // Enable/disable upload button based on bearer token input
@@ -106,7 +115,7 @@
           if (currentAuthToken) {
             uploadHeaders['Authorization'] = currentAuthToken;
           }
-          const uploadResponse = await fetch('/upload/web', {
+          const uploadResponse = await fetch(basePath + '/upload/web', {
             method: 'POST',
             headers: uploadHeaders,
             body: formData
@@ -144,7 +153,7 @@
           if (currentAuthToken) {
             headers['Authorization'] = currentAuthToken;
           }
-          const response = await fetch(`/status/${taskId}`, {
+          const response = await fetch(basePath + `/status/${taskId}`, {
             headers: headers
           });
 
@@ -192,7 +201,7 @@
       if (currentAuthToken) {
         headers['Authorization'] = currentAuthToken;
       }
-      const response = await fetch(`/download/chunks/${docStem}_chunks.json`, {
+      const response = await fetch(basePath + `/download/chunks/${docStem}_chunks.json`, {
         headers: headers
       });
       if (!response.ok) {
