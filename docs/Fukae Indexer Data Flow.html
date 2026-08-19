@@ -1,0 +1,1001 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Document Ingestion Pipeline Architecture</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#f0f7ff',
+              100: '#e0effe',
+              500: '#3b82f6',
+              600: '#2563eb',
+              700: '#1d4ed8',
+              900: '#1e3a8a'
+            },
+            accent: {
+              emerald: '#10b981',
+              amber: '#f59e0b',
+              purple: '#8b5cf6',
+              rose: '#f43f5e',
+              cyan: '#06b6d4'
+            }
+          },
+          animation: {
+            'pulse-fast': 'pulse 1s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+            'dash': 'dash 20s linear infinite',
+          },
+          keyframes: {
+            dash: {
+              'to': { strokeDashoffset: '-100' }
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fira+Code:wght@400;500;600&display=swap');
+    body {
+      font-family: 'Inter', sans-serif;
+    }
+    code, pre {
+      font-family: 'Fira Code', monospace;
+    }
+    .grid-bg {
+      background-size: 32px 32px;
+      background-image: 
+        linear-gradient(to right, rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+    }
+    .light .grid-bg {
+      background-image: 
+        linear-gradient(to right, rgba(0, 0, 0, 0.05) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(0, 0, 0, 0.05) 1px, transparent 1px);
+    }
+    .connection-line {
+      stroke-dasharray: 6;
+      transition: stroke 0.3s ease, stroke-width 0.3s ease;
+    }
+    .connection-line.active {
+      stroke-dasharray: 8 4;
+      animation: dash 1s linear infinite;
+    }
+    .node-card {
+      transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .node-card:hover {
+      transform: translateY(-2px);
+    }
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(0, 0, 0, 0.1);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(150, 150, 150, 0.3);
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(150, 150, 150, 0.5);
+    }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col antialiased selection:bg-brand-500 selection:text-white transition-colors duration-200" id="app-body">
+
+  <!-- Top Navigation Header -->
+  <header class="border-b border-slate-800 bg-slate-900/80 backdrop-blur-md sticky top-0 z-40 px-4 py-3 flex flex-wrap items-center justify-between gap-4">
+    <div class="flex items-center gap-3">
+      <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-brand-600 to-accent-cyan flex items-center justify-center text-white shadow-lg shadow-brand-500/20">
+        <i class="fa-solid fa-diagram-project text-lg"></i>
+      </div>
+      <div>
+        <h1 class="font-bold text-base md:text-lg tracking-tight text-white flex items-center gap-2">
+          Document Processing Architecture
+          <span class="text-xs px-2 py-0.5 rounded-full bg-brand-500/20 text-brand-400 font-mono border border-brand-500/30">v2.4 Pipeline</span>
+        </h1>
+        <p class="text-xs text-slate-400 hidden sm:block">Interactive visual workflow with stage tracing and simulation</p>
+      </div>
+    </div>
+
+    <!-- Right Controls -->
+    <div class="flex items-center gap-2 sm:gap-3 flex-wrap">
+      <!-- File Flow Simulator Trigger -->
+      <div class="flex items-center bg-slate-800/80 border border-slate-700 rounded-lg p-1">
+        <span class="text-xs text-slate-400 px-2 font-medium hidden md:inline"><i class="fa-solid fa-play text-accent-emerald mr-1"></i> Simulate Flow:</span>
+        <select id="sim-file-select" onchange="runSimulation(this.value)" class="bg-slate-900 text-xs text-slate-200 font-mono rounded px-2 py-1 border border-slate-700 focus:outline-none focus:ring-1 focus:ring-brand-500 cursor-pointer">
+          <option value="">Select File Type...</option>
+          <option value="pdf">📄 PDF Document (.pdf)</option>
+          <option value="md">📝 Markdown (.md)</option>
+          <option value="xlsx">📊 Excel Spreadsheet (.xlsx)</option>
+          <option value="csv">📈 CSV Data (.csv)</option>
+          <option value="pptx">📊 PowerPoint (.pptx)</option>
+          <option value="json">{} JSON Structure (.json)</option>
+          <option value="png">🖼️ Image (.png / .jpg)</option>
+        </select>
+        <button onclick="resetSimulation()" title="Reset Simulation" class="px-2 py-1 text-slate-400 hover:text-white transition">
+          <i class="fa-solid fa-rotate-right text-xs"></i>
+        </button>
+      </div>
+
+      <!-- View & Canvas Tools -->
+      <div class="flex items-center bg-slate-800/80 border border-slate-700 rounded-lg p-1">
+        <button onclick="zoomIn()" class="p-1.5 text-slate-300 hover:text-white hover:bg-slate-700 rounded transition" title="Zoom In">
+          <i class="fa-solid fa-magnifying-glass-plus text-xs"></i>
+        </button>
+        <button onclick="zoomOut()" class="p-1.5 text-slate-300 hover:text-white hover:bg-slate-700 rounded transition" title="Zoom Out">
+          <i class="fa-solid fa-magnifying-glass-minus text-xs"></i>
+        </button>
+        <button onclick="resetZoom()" class="p-1.5 text-slate-300 hover:text-white hover:bg-slate-700 rounded transition" title="Reset View">
+          <i class="fa-solid fa-expand text-xs"></i>
+        </button>
+      </div>
+
+      <button onclick="toggleTheme()" class="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 rounded-lg transition" title="Toggle Theme">
+        <i class="fa-solid fa-sun text-xs" id="theme-icon"></i>
+      </button>
+
+      <button onclick="openMermaidModal()" class="px-3 py-1.5 bg-brand-600 hover:bg-brand-500 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-md shadow-brand-600/30 transition">
+        <i class="fa-solid fa-code"></i>
+        <span>Mermaid Source</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Workspace -->
+  <main class="flex-1 flex overflow-hidden relative">
+    
+    <!-- Left Interactive Diagram Canvas -->
+    <div class="flex-1 h-full overflow-auto relative grid-bg p-6 lg:p-10 flex flex-col items-center justify-start select-none" id="canvas-container">
+      
+      <!-- Transform Scale Wrapper -->
+      <div id="diagram-wrapper" class="transition-transform duration-200 origin-top flex flex-col items-center max-w-6xl w-full my-auto py-6">
+        
+        <!-- SVG Connections Layer Overlay -->
+        <svg id="svg-connections" class="absolute inset-0 w-full h-full pointer-events-none z-0" style="min-height: 1200px;">
+          <defs>
+            <!-- Marker Arrows -->
+            <marker id="arrow" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b" />
+            </marker>
+            <marker id="arrow-active" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="#3b82f6" />
+            </marker>
+            <marker id="arrow-passthrough" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="#10b981" />
+            </marker>
+          </defs>
+          <g id="lines-group"></g>
+        </svg>
+
+        <!-- Flowchart Content Nodes -->
+        <div class="relative z-10 w-full flex flex-col items-center gap-12">
+          
+          <!-- LEVEL 1: INPUT DOCUMENT -->
+          <div class="flex flex-col items-center">
+            <div id="node-A" onclick="selectNode('A')" class="node-card cursor-pointer bg-slate-900/90 border-2 border-brand-500/60 hover:border-brand-400 rounded-2xl p-4 px-6 shadow-xl shadow-brand-500/10 flex items-center gap-4 text-left w-72 backdrop-blur">
+              <div class="w-12 h-12 rounded-xl bg-brand-500/20 text-brand-400 flex items-center justify-center text-xl shrink-0 border border-brand-500/30">
+                <i class="fa-solid fa-file-arrow-up"></i>
+              </div>
+              <div>
+                <span class="text-[10px] font-bold text-brand-400 tracking-wider uppercase block">Entry Point</span>
+                <h3 class="font-bold text-slate-100 text-base">Input Document</h3>
+                <p class="text-xs text-slate-400">Raw document ingestion</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- LEVEL 2: ROUTER / DECISION NODE -->
+          <div class="flex flex-col items-center">
+            <div id="node-B" onclick="selectNode('B')" class="node-card cursor-pointer bg-slate-900/90 border-2 border-purple-500/60 hover:border-purple-400 rounded-2xl p-4 px-6 shadow-xl shadow-purple-500/10 flex items-center gap-4 text-left w-80 backdrop-blur">
+              <div class="w-12 h-12 rounded-xl bg-purple-500/20 text-purple-400 flex items-center justify-center text-xl shrink-0 border border-purple-500/30">
+                <i class="fa-solid fa-filter"></i>
+              </div>
+              <div>
+                <span class="text-[10px] font-bold text-purple-400 tracking-wider uppercase block">Branch Decision</span>
+                <h3 class="font-bold text-slate-100 text-base">File Extension Router</h3>
+                <p class="text-xs text-slate-400">Inspects extension & routes parser</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- LEVEL 3: PARSER BRANCHES (Horizontal Fan-out) -->
+          <div class="w-full grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3 px-2">
+            
+            <!-- Branch C: Passthrough -->
+            <div id="node-C" onclick="selectNode('C')" class="node-card cursor-pointer bg-slate-900/80 border border-emerald-500/50 hover:border-emerald-400 rounded-xl p-3 shadow-md flex flex-col items-center text-center backdrop-blur">
+              <div class="w-8 h-8 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-sm mb-2 border border-emerald-500/30">
+                <i class="fa-solid fa-bolt"></i>
+              </div>
+              <h4 class="font-bold text-xs text-slate-200">Passthrough</h4>
+              <p class="text-[10px] text-emerald-400 font-mono mt-1 bg-emerald-950/50 px-1.5 py-0.5 rounded border border-emerald-800/40">.md, .txt</p>
+              <span class="text-[9px] text-slate-400 mt-2">Bypasses Stage 1-3</span>
+            </div>
+
+            <!-- Branch D: Docling -->
+            <div id="node-D" onclick="selectNode('D')" class="node-card cursor-pointer bg-slate-900/80 border border-blue-500/50 hover:border-blue-400 rounded-xl p-3 shadow-md flex flex-col items-center text-center backdrop-blur">
+              <div class="w-8 h-8 rounded-lg bg-blue-500/20 text-blue-400 flex items-center justify-center text-sm mb-2 border border-blue-500/30">
+                <i class="fa-solid fa-file-pdf"></i>
+              </div>
+              <h4 class="font-bold text-xs text-slate-200">Stage 1: Docling</h4>
+              <p class="text-[10px] text-blue-400 font-mono mt-1 bg-blue-950/50 px-1.5 py-0.5 rounded border border-blue-800/40">.pdf, .docx, .html...</p>
+              <span class="text-[9px] text-slate-400 mt-2">Layout & OCR parse</span>
+            </div>
+
+            <!-- Branch E: Excel -->
+            <div id="node-E" onclick="selectNode('E')" class="node-card cursor-pointer bg-slate-900/80 border border-teal-500/50 hover:border-teal-400 rounded-xl p-3 shadow-md flex flex-col items-center text-center backdrop-blur">
+              <div class="w-8 h-8 rounded-lg bg-teal-500/20 text-teal-400 flex items-center justify-center text-sm mb-2 border border-teal-500/30">
+                <i class="fa-solid fa-file-excel"></i>
+              </div>
+              <h4 class="font-bold text-xs text-slate-200">Stage 1: Excel</h4>
+              <p class="text-[10px] text-teal-400 font-mono mt-1 bg-teal-950/50 px-1.5 py-0.5 rounded border border-teal-800/40">.xlsx, .xls</p>
+              <span class="text-[9px] text-slate-400 mt-2">Sheet & workbook parse</span>
+            </div>
+
+            <!-- Branch F: CSV -->
+            <div id="node-F" onclick="selectNode('F')" class="node-card cursor-pointer bg-slate-900/80 border border-amber-500/50 hover:border-amber-400 rounded-xl p-3 shadow-md flex flex-col items-center text-center backdrop-blur">
+              <div class="w-8 h-8 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center text-sm mb-2 border border-amber-500/30">
+                <i class="fa-solid fa-file-csv"></i>
+              </div>
+              <h4 class="font-bold text-xs text-slate-200">Stage 1: CSV</h4>
+              <p class="text-[10px] text-amber-400 font-mono mt-1 bg-amber-950/50 px-1.5 py-0.5 rounded border border-amber-800/40">.csv</p>
+              <span class="text-[9px] text-slate-400 mt-2">Tabular delimiter parse</span>
+            </div>
+
+            <!-- Branch G: PPTX -->
+            <div id="node-G" onclick="selectNode('G')" class="node-card cursor-pointer bg-slate-900/80 border border-orange-500/50 hover:border-orange-400 rounded-xl p-3 shadow-md flex flex-col items-center text-center backdrop-blur">
+              <div class="w-8 h-8 rounded-lg bg-orange-500/20 text-orange-400 flex items-center justify-center text-sm mb-2 border border-orange-500/30">
+                <i class="fa-solid fa-file-powerpoint"></i>
+              </div>
+              <h4 class="font-bold text-xs text-slate-200">Stage 1: PPTX</h4>
+              <p class="text-[10px] text-orange-400 font-mono mt-1 bg-orange-950/50 px-1.5 py-0.5 rounded border border-orange-800/40">.pptx, .ppt</p>
+              <span class="text-[9px] text-slate-400 mt-2">Slide shape & text parse</span>
+            </div>
+
+            <!-- Branch H: JSON -->
+            <div id="node-H" onclick="selectNode('H')" class="node-card cursor-pointer bg-slate-900/80 border border-pink-500/50 hover:border-pink-400 rounded-xl p-3 shadow-md flex flex-col items-center text-center backdrop-blur">
+              <div class="w-8 h-8 rounded-lg bg-pink-500/20 text-pink-400 flex items-center justify-center text-sm mb-2 border border-pink-500/30">
+                <i class="fa-solid fa-file-code"></i>
+              </div>
+              <h4 class="font-bold text-xs text-slate-200">Stage 1: JSON</h4>
+              <p class="text-[10px] text-pink-400 font-mono mt-1 bg-pink-950/50 px-1.5 py-0.5 rounded border border-pink-800/40">.json</p>
+              <span class="text-[9px] text-slate-400 mt-2">Structured key tree</span>
+            </div>
+
+            <!-- Branch I: Image -->
+            <div id="node-I" onclick="selectNode('I')" class="node-card cursor-pointer bg-slate-900/80 border border-indigo-500/50 hover:border-indigo-400 rounded-xl p-3 shadow-md flex flex-col items-center text-center backdrop-blur">
+              <div class="w-8 h-8 rounded-lg bg-indigo-500/20 text-indigo-400 flex items-center justify-center text-sm mb-2 border border-indigo-500/30">
+                <i class="fa-solid fa-file-image"></i>
+              </div>
+              <h4 class="font-bold text-xs text-slate-200">Stage 1: Image</h4>
+              <p class="text-[10px] text-indigo-400 font-mono mt-1 bg-indigo-950/50 px-1.5 py-0.5 rounded border border-indigo-800/40">.png, .jpg...</p>
+              <span class="text-[9px] text-slate-400 mt-2">Vision & OCR extract</span>
+            </div>
+
+          </div>
+
+          <!-- PIPELINE SPINE (Stages 2 through 6) -->
+          <div class="flex flex-col items-center gap-6 w-full max-w-md">
+
+            <!-- Stage 2: Tables Processing -->
+            <div id="node-K" onclick="selectNode('K')" class="node-card cursor-pointer w-full bg-slate-900/90 border border-slate-700 hover:border-cyan-400 rounded-xl p-4 shadow-lg flex items-center gap-4 backdrop-blur">
+              <div class="w-10 h-10 rounded-lg bg-cyan-500/20 text-cyan-400 flex items-center justify-center text-lg shrink-0 border border-cyan-500/30">
+                <i class="fa-solid fa-table-cells"></i>
+              </div>
+              <div class="flex-1">
+                <div class="flex items-center justify-between">
+                  <span class="text-[10px] font-bold text-cyan-400 tracking-wider uppercase">Stage 2</span>
+                  <span class="text-[10px] text-slate-400 font-mono">Aggregation</span>
+                </div>
+                <h3 class="font-bold text-slate-100 text-sm">Tables Processing</h3>
+                <p class="text-xs text-slate-400">Extracts, converts to Markdown/HTML grid structures</p>
+              </div>
+            </div>
+
+            <!-- Stage 3: Vision Processing -->
+            <div id="node-L" onclick="selectNode('L')" class="node-card cursor-pointer w-full bg-slate-900/90 border border-slate-700 hover:border-rose-400 rounded-xl p-4 shadow-lg flex items-center gap-4 backdrop-blur">
+              <div class="w-10 h-10 rounded-lg bg-rose-500/20 text-rose-400 flex items-center justify-center text-lg shrink-0 border border-rose-500/30">
+                <i class="fa-solid fa-eye"></i>
+              </div>
+              <div class="flex-1">
+                <div class="flex items-center justify-between">
+                  <span class="text-[10px] font-bold text-rose-400 tracking-wider uppercase">Stage 3</span>
+                  <span class="text-[10px] text-slate-400 font-mono">Multimodal</span>
+                </div>
+                <h3 class="font-bold text-slate-100 text-sm">Vision Processing</h3>
+                <p class="text-xs text-slate-400">VLM figure descriptions & chart captions</p>
+              </div>
+            </div>
+
+            <!-- Stage 4: Chunking -->
+            <div id="node-M" onclick="selectNode('M')" class="node-card cursor-pointer w-full bg-slate-900/90 border border-slate-700 hover:border-amber-400 rounded-xl p-4 shadow-lg flex items-center gap-4 backdrop-blur">
+              <div class="w-10 h-10 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center text-lg shrink-0 border border-amber-500/30">
+                <i class="fa-solid fa-scissors"></i>
+              </div>
+              <div class="flex-1">
+                <div class="flex items-center justify-between">
+                  <span class="text-[10px] font-bold text-amber-400 tracking-wider uppercase">Stage 4</span>
+                  <span class="text-[10px] text-slate-400 font-mono">Segmentation</span>
+                </div>
+                <h3 class="font-bold text-slate-100 text-sm">Chunking</h3>
+                <p class="text-xs text-slate-400">Semantic & layout-aware document chunking</p>
+              </div>
+            </div>
+
+            <!-- Stage 5: Metadata Enrichment -->
+            <div id="node-N" onclick="selectNode('N')" class="node-card cursor-pointer w-full bg-slate-900/90 border border-slate-700 hover:border-violet-400 rounded-xl p-4 shadow-lg flex items-center gap-4 backdrop-blur">
+              <div class="w-10 h-10 rounded-lg bg-violet-500/20 text-violet-400 flex items-center justify-center text-lg shrink-0 border border-violet-500/30">
+                <i class="fa-solid fa-tags"></i>
+              </div>
+              <div class="flex-1">
+                <div class="flex items-center justify-between">
+                  <span class="text-[10px] font-bold text-violet-400 tracking-wider uppercase">Stage 5</span>
+                  <span class="text-[10px] text-slate-400 font-mono">Enhancement</span>
+                </div>
+                <h3 class="font-bold text-slate-100 text-sm">Metadata Enrichment</h3>
+                <p class="text-xs text-slate-400">Summaries, keywords, page context & parent tracking</p>
+              </div>
+            </div>
+
+            <!-- Stage 6: Embedding Generation -->
+            <div id="node-O" onclick="selectNode('O')" class="node-card cursor-pointer w-full bg-slate-900/90 border border-slate-700 hover:border-emerald-400 rounded-xl p-4 shadow-lg flex items-center gap-4 backdrop-blur">
+              <div class="w-10 h-10 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-lg shrink-0 border border-emerald-500/30">
+                <i class="fa-solid fa-network-wired"></i>
+              </div>
+              <div class="flex-1">
+                <div class="flex items-center justify-between">
+                  <span class="text-[10px] font-bold text-emerald-400 tracking-wider uppercase">Stage 6</span>
+                  <span class="text-[10px] text-slate-400 font-mono">Vectorization</span>
+                </div>
+                <h3 class="font-bold text-slate-100 text-sm">Embedding Generation</h3>
+                <p class="text-xs text-slate-400">Dense vector creation via Embedding model API</p>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- LEVEL 5: OUTPUT ENDPOINTS (Return Chunks or Output JSON File) -->
+          <div class="w-full max-w-2xl grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
+            
+            <!-- Direct Passthrough Return -->
+            <div id="node-J" onclick="selectNode('J')" class="node-card cursor-pointer bg-slate-900/90 border-2 border-emerald-500/60 hover:border-emerald-400 rounded-xl p-4 shadow-lg flex items-center gap-3 backdrop-blur">
+              <div class="w-10 h-10 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-lg shrink-0 border border-emerald-500/30">
+                <i class="fa-solid fa-reply"></i>
+              </div>
+              <div>
+                <span class="text-[10px] font-bold text-emerald-400 tracking-wider uppercase block">Fast-path Result</span>
+                <h3 class="font-bold text-slate-100 text-sm">Return Chunks</h3>
+                <p class="text-xs text-slate-400">Direct markdown text return</p>
+              </div>
+            </div>
+
+            <!-- Standard Output File -->
+            <div id="node-P" onclick="selectNode('P')" class="node-card cursor-pointer bg-slate-900/90 border-2 border-brand-500/60 hover:border-brand-400 rounded-xl p-4 shadow-lg flex items-center gap-3 backdrop-blur">
+              <div class="w-10 h-10 rounded-lg bg-brand-500/20 text-brand-400 flex items-center justify-center text-lg shrink-0 border border-brand-500/30">
+                <i class="fa-solid fa-file-export"></i>
+              </div>
+              <div>
+                <span class="text-[10px] font-bold text-brand-400 tracking-wider uppercase block">Pipeline Output</span>
+                <h3 class="font-bold text-slate-100 text-sm">JSON Chunk Storage</h3>
+                <p class="text-xs text-brand-300 font-mono mt-0.5">chunks/{doc_stem}_chunks.json</p>
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- Right Detail Inspector Panel -->
+    <aside id="inspector-panel" class="w-80 sm:w-96 border-l border-slate-800 bg-slate-900/90 backdrop-blur flex flex-col shrink-0 z-30 transition-all duration-300 transform translate-x-0">
+      
+      <!-- Panel Header -->
+      <div class="p-4 border-b border-slate-800 flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <i class="fa-solid fa-sliders text-brand-400 text-sm"></i>
+          <h2 class="font-bold text-sm text-slate-100">Stage Inspector</h2>
+        </div>
+        <span id="active-node-tag" class="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-300">
+          Click any node
+        </span>
+      </div>
+
+      <!-- Panel Content -->
+      <div class="p-5 flex-1 overflow-y-auto space-y-5" id="inspector-body">
+        
+        <!-- Welcome Default View -->
+        <div id="inspector-empty" class="text-center py-10 text-slate-500 space-y-3">
+          <div class="w-14 h-14 rounded-2xl bg-slate-800/60 flex items-center justify-center text-slate-400 text-2xl mx-auto border border-slate-700/50">
+            <i class="fa-solid fa-hand-pointer"></i>
+          </div>
+          <p class="text-xs leading-relaxed px-4">
+            Click on any node in the diagram to inspect its parameters, inputs/outputs, implementation details, and chunk schemas.
+          </p>
+        </div>
+
+        <!-- Dynamic Node Content (Hidden initially) -->
+        <div id="inspector-details" class="hidden space-y-5">
+          <div>
+            <span id="inspector-badge" class="text-[10px] font-semibold tracking-wider uppercase px-2 py-0.5 rounded bg-brand-500/20 text-brand-400 border border-brand-500/30">
+              Stage Info
+            </span>
+            <h2 id="inspector-title" class="text-xl font-bold text-slate-100 mt-2">Stage Title</h2>
+            <p id="inspector-subtitle" class="text-xs text-slate-400 mt-1">Stage description</p>
+          </div>
+
+          <!-- Key Metrics / Tech Specs -->
+          <div class="bg-slate-950/60 border border-slate-800 rounded-xl p-3.5 space-y-2">
+            <h4 class="text-[11px] font-bold text-slate-300 uppercase tracking-wider">Technical Summary</h4>
+            <div class="grid grid-cols-2 gap-2 text-xs">
+              <div class="bg-slate-900 p-2 rounded border border-slate-800/80">
+                <span class="text-[10px] text-slate-500 block">Library / Engine</span>
+                <span id="inspector-engine" class="font-mono text-slate-200 text-[11px]">Docling v2</span>
+              </div>
+              <div class="bg-slate-900 p-2 rounded border border-slate-800/80">
+                <span class="text-[10px] text-slate-500 block">Latency Profile</span>
+                <span id="inspector-latency" class="font-mono text-slate-200 text-[11px]">~120ms</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Description Detail -->
+          <div class="space-y-2">
+            <h4 class="text-[11px] font-bold text-slate-300 uppercase tracking-wider">Process Overview</h4>
+            <p id="inspector-desc" class="text-xs text-slate-300 leading-relaxed bg-slate-950/40 p-3 rounded-lg border border-slate-800/60">
+              Detailed breakdown of operations taking place at this step.
+            </p>
+          </div>
+
+          <!-- Code Snippet Mockup -->
+          <div class="space-y-2">
+            <div class="flex items-center justify-between">
+              <h4 class="text-[11px] font-bold text-slate-300 uppercase tracking-wider">Example Data Schema</h4>
+              <button onclick="copySnippet()" class="text-[10px] text-brand-400 hover:text-brand-300 font-mono">
+                <i class="fa-regular fa-copy"></i> Copy
+              </button>
+            </div>
+            <div class="relative bg-slate-950 rounded-xl border border-slate-800 p-3 overflow-x-auto">
+              <pre id="inspector-code" class="text-[11px] text-emerald-400 font-mono">{}</pre>
+            </div>
+          </div>
+
+          <!-- Next Steps / Connected Nodes -->
+          <div class="space-y-2">
+            <h4 class="text-[11px] font-bold text-slate-300 uppercase tracking-wider">Target Outlets</h4>
+            <div id="inspector-targets" class="flex flex-wrap gap-1.5">
+              <!-- Dynamically rendered pill tags -->
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+
+      <!-- Live Simulation Status Bar -->
+      <div id="sim-status-bar" class="p-3 border-t border-slate-800 bg-slate-950/80 flex items-center justify-between text-xs">
+        <div class="flex items-center gap-2">
+          <span class="w-2 h-2 rounded-full bg-slate-500" id="sim-indicator"></span>
+          <span id="sim-text" class="text-slate-400 text-[11px]">Simulator Idle</span>
+        </div>
+        <span id="sim-time" class="font-mono text-[10px] text-slate-500">0 ms</span>
+      </div>
+
+    </aside>
+
+  </main>
+
+  <!-- Mermaid Source Modal -->
+  <div id="mermaid-modal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl flex flex-col max-h-[85vh]">
+      <div class="p-4 border-b border-slate-800 flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <i class="fa-solid fa-code text-brand-400"></i>
+          <h3 class="font-bold text-slate-100 text-sm">Original Mermaid Code Definition</h3>
+        </div>
+        <button onclick="closeMermaidModal()" class="text-slate-400 hover:text-white transition p-1">
+          <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+      </div>
+      <div class="p-4 overflow-y-auto flex-1 bg-slate-950">
+        <pre id="mermaid-code-text" class="text-xs text-brand-300 font-mono whitespace-pre-wrap leading-relaxed select-all">graph TD
+    A[Input Document] --> B{File Extension}
+    B -->|.md|.txt| C[Passthrough Processing]
+    B -->|.pdf|.docx|.doc|.odt|.rtf|.html|.htm| D[Stage 1: Parse via Docling]
+    B -->|.xlsx|.xls| E[Stage 1: Parse Excel]
+    B -->|.csv| F[Stage 1: Parse CSV]
+    B -->|.pptx|.ppt| G[Stage 1: Parse PPTX]
+    B -->|.json| H[Stage 1: Parse JSON]
+    B -->|.png|.jpg|.jpeg|.gif|.bmp|.tiff|.webp| I[Stage 1: Parse Image]
+
+    C --> J[Return Chunks]
+    D --> K[Stage 2: Tables Processing]
+    E --> K
+    F --> K
+    G --> K
+    H --> K
+    I --> K
+
+    K --> L[Stage 3: Vision Processing]
+    L --> M[Stage 4: Chunking]
+    M --> N[Stage 5: Metadata Enrichment]
+    N --> O[Stage 6: Embedding Generation]
+    O --> P[Output: chunks/{doc_stem}_chunks.json]</pre>
+      </div>
+      <div class="p-3 border-t border-slate-800 bg-slate-900 flex justify-end gap-2">
+        <button onclick="copyMermaidText()" class="px-4 py-1.5 bg-brand-600 hover:bg-brand-500 text-white rounded-lg text-xs font-semibold transition flex items-center gap-1.5">
+          <i class="fa-regular fa-copy"></i> Copy Code
+        </button>
+        <button onclick="closeMermaidModal()" class="px-4 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs transition">
+          Close
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Node Data Registry matching user flowchart nodes
+    const nodeRegistry = {
+      'A': {
+        title: 'Input Document',
+        subtitle: 'Ingestion Entrypoint',
+        badge: 'Source',
+        engine: 'Pipeline Controller',
+        latency: '< 1ms',
+        desc: 'Accepts arbitrary incoming binary files or document streams. Computes hash digest and detects raw file extension.',
+        targets: ['B'],
+        code: `{\n  "doc_id": "doc_98f41a",\n  "filename": "Q3_Financial_Report.pdf",\n  "file_size_bytes": 4821042,\n  "mime_type": "application/pdf"\n}`
+      },
+      'B': {
+        title: 'File Extension Router',
+        subtitle: 'Branch Decision Logic',
+        badge: 'Router',
+        engine: 'MIME/Ext Evaluator',
+        latency: '~2ms',
+        desc: 'Inspects file extension or magic bytes to dispatch the document to its designated Stage 1 parser engine or direct passthrough.',
+        targets: ['C', 'D', 'E', 'F', 'G', 'H', 'I'],
+        code: `switch (fileExt) {\n  case '.md': case '.txt': return 'Passthrough';\n  case '.pdf': case '.docx': return 'Docling';\n  case '.xlsx': return 'Excel';\n  default: return 'ImageOrJson';\n}`
+      },
+      'C': {
+        title: 'Passthrough Processing',
+        subtitle: 'Bypasses Parsers',
+        badge: 'Fast Path',
+        engine: 'Plain Text Stream',
+        latency: '~5ms',
+        desc: 'Directly ingests Markdown or plain text without complex layout or OCR parsing. Immediately yields text chunks.',
+        targets: ['J'],
+        code: `{\n  "mode": "passthrough",\n  "raw_text": "# Q3 Report\\nKey highlights...",\n  "skip_stages": [1, 2, 3]\n}`
+      },
+      'D': {
+        title: 'Stage 1: Docling Parser',
+        subtitle: 'PDF / Office / Web Documents',
+        badge: 'Stage 1 Parser',
+        engine: 'Docling Engine v2',
+        latency: '~450ms',
+        desc: 'Uses Docling layout analysis model to parse PDFs, Word docs, HTML, and RTF into unified structured Document Object Models with bounding boxes.',
+        targets: ['K'],
+        code: `{\n  "parser": "Docling",\n  "pages": 12,\n  "elements": [\n    {"type": "heading", "text": "Executive Summary"},\n    {"type": "table", "bbox": [10, 20, 200, 300]}\n  ]\n}`
+      },
+      'E': {
+        title: 'Stage 1: Excel Parser',
+        subtitle: 'Spreadsheet Documents',
+        badge: 'Stage 1 Parser',
+        engine: 'openpyxl / Calamine',
+        latency: '~120ms',
+        desc: 'Iterates sheets, extracts grid values, named ranges, and formula results. Prepares structured tabular matrices for Stage 2 processing.',
+        targets: ['K'],
+        code: `{\n  "sheets": ["Q3_Summary", "RawData"],\n  "total_cells": 1420,\n  "tables_detected": 2\n}`
+      },
+      'F': {
+        title: 'Stage 1: CSV Parser',
+        subtitle: 'Delimited Tabular Data',
+        badge: 'Stage 1 Parser',
+        engine: 'CSV Sniffer Engine',
+        latency: '~15ms',
+        desc: 'Detects delimiter, encoding, and header schemas. Normalizes tabular records into markdown matrix structures.',
+        targets: ['K'],
+        code: `{\n  "delimiter": ",",\n  "rows": 850,\n  "columns": ["Date", "Revenue", "Margin"]\n}`
+      },
+      'G': {
+        title: 'Stage 1: PPTX Parser',
+        subtitle: 'Presentation Slides',
+        badge: 'Stage 1 Parser',
+        engine: 'python-pptx',
+        latency: '~210ms',
+        desc: 'Extracts slide hierarchy, text shapes, speaker notes, and embedded diagrams from PowerPoint presentations.',
+        targets: ['K'],
+        code: `{\n  "slide_count": 24,\n  "has_notes": true,\n  "diagrams_extracted": 5\n}`
+      },
+      'H': {
+        title: 'Stage 1: JSON Parser',
+        subtitle: 'Structured Data Streams',
+        badge: 'Stage 1 Parser',
+        engine: 'JSON Schema Flattener',
+        latency: '~10ms',
+        desc: 'Recursively flattens deeply nested JSON structures into key-value context blocks and textual representations.',
+        targets: ['K'],
+        code: `{\n  "root_keys": ["meta", "records"],\n  "flattened_nodes": 48\n}`
+      },
+      'I': {
+        title: 'Stage 1: Image Parser',
+        subtitle: 'Visual Media / Scans',
+        badge: 'Stage 1 Parser',
+        engine: 'Tesseract / PaddleOCR',
+        latency: '~680ms',
+        desc: 'Performs layout segmentation, orientation detection, and high-accuracy OCR on bitmap image formats.',
+        targets: ['K'],
+        code: `{\n  "dpi": 300,\n  "ocr_confidence": 0.962,\n  "text_blocks_found": 14\n}`
+      },
+      'J': {
+        title: 'Return Chunks',
+        subtitle: 'Passthrough Return Endpoint',
+        badge: 'Output Endpoint',
+        engine: 'Direct Return Handler',
+        latency: '~2ms',
+        desc: 'Yields final text chunks directly from passthrough files (.md, .txt) without running downstream embedding generation.',
+        targets: [],
+        code: `{\n  "status": "success",\n  "source": "passthrough",\n  "chunk_count": 4\n}`
+      },
+      'K': {
+        title: 'Stage 2: Tables Processing',
+        subtitle: 'Tabular Structure Optimization',
+        badge: 'Stage 2',
+        engine: 'TableTransformer / Markdown Grid',
+        latency: '~180ms',
+        desc: 'Unifies multi-source tables into semantic Markdown grid formats, preserving column alignment, header context, and span cells.',
+        targets: ['L'],
+        code: `{\n  "tables_processed": 3,\n  "output_format": "markdown_table",\n  "sample": "| Quarter | Rev |\\n|---|---|\\n| Q3 | $4.2M |"\n}`
+      },
+      'L': {
+        title: 'Stage 3: Vision Processing',
+        subtitle: 'Multimodal Image & Chart Captions',
+        badge: 'Stage 3',
+        engine: 'VLM / LLaVA / Claude Vision',
+        latency: '~850ms',
+        desc: 'Generates detailed textual summaries and analytical captions for charts, diagrams, and figures extracted from documents.',
+        targets: ['M'],
+        code: `{\n  "figures_captioned": 2,\n  "caption": "Bar chart illustrating 18% YoY revenue growth in Q3 2026."\n}`
+      },
+      'M': {
+        title: 'Stage 4: Chunking',
+        subtitle: 'Semantic Document Splitter',
+        badge: 'Stage 4',
+        engine: 'Recursive Layout Chunking',
+        latency: '~45ms',
+        desc: 'Splits processed document text into overlapping token windows respecting section headers, table boundaries, and sentence boundaries.',
+        targets: ['N'],
+        code: `{\n  "target_tokens": 512,\n  "overlap": 50,\n  "total_chunks_created": 18\n}`
+      },
+      'N': {
+        title: 'Stage 5: Metadata Enrichment',
+        subtitle: 'Context & Keyword Synthesis',
+        badge: 'Stage 5',
+        engine: 'LLM Keyphrase / Summary Synthesizer',
+        latency: '~320ms',
+        desc: 'Injects document title, page numbers, surrounding section hierarchy, generated summaries, and tag metadata into each chunk.',
+        targets: ['O'],
+        code: `{\n  "chunk_id": "chunk_04",\n  "metadata": {\n    "page": 3,\n    "section": "Financial Highlights",\n    "keywords": ["Q3", "Revenue", "Growth"]\n  }\n}`
+      },
+      'O': {
+        title: 'Stage 6: Embedding Generation',
+        subtitle: 'Vector Space Representation',
+        badge: 'Stage 6',
+        engine: 'text-embedding-3-large',
+        latency: '~250ms',
+        desc: 'Batch-vectorizes enriched chunk text into dense floating-point vector arrays ready for vector database insertion.',
+        targets: ['P'],
+        code: `{\n  "model": "text-embedding-3-large",\n  "dimensions": 1536,\n  "embeddings_computed": 18\n}`
+      },
+      'P': {
+        title: 'Output File Storage',
+        subtitle: 'Final Processing Result',
+        badge: 'Final Output',
+        engine: 'JSON File System',
+        latency: '~5ms',
+        desc: 'Writes vectorized chunks, metadata, and document tree structure to final output path `chunks/{doc_stem}_chunks.json`.',
+        targets: [],
+        code: `{\n  "output_path": "chunks/Q3_Financial_Report_chunks.json",\n  "total_chunks": 18,\n  "status": "COMPLETED"\n}`
+      }
+    };
+
+    // Connections definition based on graph TD
+    const connections = [
+      { from: 'A', to: 'B', label: '' },
+      { from: 'B', to: 'C', label: '.md, .txt', pathType: 'passthrough' },
+      { from: 'B', to: 'D', label: '.pdf, .docx...' },
+      { from: 'B', to: 'E', label: '.xlsx, .xls' },
+      { from: 'B', to: 'F', label: '.csv' },
+      { from: 'B', to: 'G', label: '.pptx, .ppt' },
+      { from: 'B', to: 'H', label: '.json' },
+      { from: 'B', to: 'I', label: '.png, .jpg...' },
+      { from: 'C', to: 'J', label: '', pathType: 'passthrough' },
+      { from: 'D', to: 'K', label: '' },
+      { from: 'E', to: 'K', label: '' },
+      { from: 'F', to: 'K', label: '' },
+      { from: 'G', to: 'K', label: '' },
+      { from: 'H', to: 'K', label: '' },
+      { from: 'I', to: 'K', label: '' },
+      { from: 'K', to: 'L', label: '' },
+      { from: 'L', to: 'M', label: '' },
+      { from: 'M', to: 'N', label: '' },
+      { from: 'N', to: 'O', label: '' },
+      { from: 'O', to: 'P', label: '' }
+    ];
+
+    let currentScale = 1;
+    let selectedNodeId = null;
+    let simInterval = null;
+
+    // Function to calculate and render SVG arrows connecting nodes
+    function renderSVGConnections(activePath = []) {
+      const linesGroup = document.getElementById('lines-group');
+      const container = document.getElementById('diagram-wrapper');
+      const containerRect = container.getBoundingClientRect();
+      linesGroup.innerHTML = '';
+
+      connections.forEach((conn, index) => {
+        const fromEl = document.getElementById(`node-${conn.from}`);
+        const toEl = document.getElementById(`node-${conn.to}`);
+
+        if (!fromEl || !toEl) return;
+
+        const fromRect = fromEl.getBoundingClientRect();
+        const toRect = toEl.getBoundingClientRect();
+
+        // Calculate relative coordinates in diagram wrapper
+        const startX = (fromRect.left + fromRect.width / 2 - containerRect.left) / currentScale;
+        const startY = (fromRect.bottom - containerRect.top) / currentScale;
+
+        const endX = (toRect.left + toRect.width / 2 - containerRect.left) / currentScale;
+        const endY = (toRect.top - containerRect.top) / currentScale;
+
+        // Curve control points
+        const deltaY = endY - startY;
+        const cp1Y = startY + Math.max(20, deltaY * 0.4);
+        const cp2Y = endY - Math.max(20, deltaY * 0.4);
+
+        const pathD = `M ${startX} ${startY} C ${startX} ${cp1Y}, ${endX} ${cp2Y}, ${endX} ${endY}`;
+
+        const isPathActive = activePath.includes(conn.from) && activePath.includes(conn.to);
+        const isPassthrough = conn.pathType === 'passthrough';
+
+        // Create Path Element
+        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        path.setAttribute('d', pathD);
+        path.setAttribute('fill', 'none');
+        
+        let strokeColor = '#334155'; // default dark slate
+        let marker = 'url(#arrow)';
+
+        if (isPathActive) {
+          strokeColor = isPassthrough ? '#10b981' : '#3b82f6';
+          marker = isPassthrough ? 'url(#arrow-passthrough)' : 'url(#arrow-active)';
+        } else if (isPassthrough) {
+          strokeColor = '#059669';
+        }
+
+        path.setAttribute('stroke', strokeColor);
+        path.setAttribute('stroke-width', isPathActive ? '3' : '2');
+        path.setAttribute('marker-end', marker);
+        path.setAttribute('class', `connection-line ${isPathActive ? 'active' : ''}`);
+
+        linesGroup.appendChild(path);
+
+        // Add optional floating extension text badges on router branches
+        if (conn.label) {
+          const midX = (startX + endX) / 2;
+          const midY = (startY + endY) / 2;
+
+          const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+          text.setAttribute('x', midX);
+          text.setAttribute('y', midY);
+          text.setAttribute('fill', isPathActive ? '#ffffff' : '#94a3b8');
+          text.setAttribute('font-size', '10');
+          text.setAttribute('font-family', 'Fira Code, monospace');
+          text.setAttribute('text-anchor', 'middle');
+          text.setAttribute('class', 'bg-slate-900 px-1');
+          text.textContent = conn.label;
+
+          linesGroup.appendChild(text);
+        }
+      });
+    }
+
+    function selectNode(id) {
+      selectedNodeId = id;
+      const info = nodeRegistry[id];
+      if (!info) return;
+
+      // Highlight Node UI
+      document.querySelectorAll('.node-card').forEach(el => {
+        el.classList.remove('ring-2', 'ring-brand-400', 'ring-offset-2', 'ring-offset-slate-950');
+      });
+      const nodeEl = document.getElementById(`node-${id}`);
+      if (nodeEl) {
+        nodeEl.classList.add('ring-2', 'ring-brand-400', 'ring-offset-2', 'ring-offset-slate-950');
+      }
+
+      // Fill Inspector Data
+      document.getElementById('inspector-empty').classList.add('hidden');
+      document.getElementById('inspector-details').classList.remove('hidden');
+
+      document.getElementById('active-node-tag').textContent = `NODE: ${id}`;
+      document.getElementById('inspector-badge').textContent = info.badge;
+      document.getElementById('inspector-title').textContent = info.title;
+      document.getElementById('inspector-subtitle').textContent = info.subtitle;
+      document.getElementById('inspector-engine').textContent = info.engine;
+      document.getElementById('inspector-latency').textContent = info.latency;
+      document.getElementById('inspector-desc').textContent = info.desc;
+      document.getElementById('inspector-code').textContent = info.code;
+
+      // Render Targets
+      const targetsContainer = document.getElementById('inspector-targets');
+      targetsContainer.innerHTML = '';
+      if (info.targets.length === 0) {
+        targetsContainer.innerHTML = `<span class="text-xs text-slate-500 italic">End of Pipeline</span>`;
+      } else {
+        info.targets.forEach(tId => {
+          const tInfo = nodeRegistry[tId];
+          const pill = document.createElement('button');
+          pill.onclick = () => selectNode(tId);
+          pill.className = 'text-[11px] bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-2.5 py-1 rounded-md transition flex items-center gap-1 font-mono';
+          pill.innerHTML = `<span>[${tId}]</span> <span>${tInfo ? tInfo.title : ''}</span> <i class="fa-solid fa-arrow-right text-[9px] text-slate-400"></i>`;
+          targetsContainer.appendChild(pill);
+        });
+      }
+
+      // Re-render lines with focus active line
+      renderSVGConnections([id, ...info.targets]);
+    }
+
+    function runSimulation(fileType) {
+      if (!fileType) {
+        resetSimulation();
+        return;
+      }
+
+      let route = [];
+      if (fileType === 'md') {
+        route = ['A', 'B', 'C', 'J'];
+      } else if (fileType === 'pdf') {
+        route = ['A', 'B', 'D', 'K', 'L', 'M', 'N', 'O', 'P'];
+      } else if (fileType === 'xlsx') {
+        route = ['A', 'B', 'E', 'K', 'L', 'M', 'N', 'O', 'P'];
+      } else if (fileType === 'csv') {
+        route = ['A', 'B', 'F', 'K', 'L', 'M', 'N', 'O', 'P'];
+      } else if (fileType === 'pptx') {
+        route = ['A', 'B', 'G', 'K', 'L', 'M', 'N', 'O', 'P'];
+      } else if (fileType === 'json') {
+        route = ['A', 'B', 'H', 'K', 'L', 'M', 'N', 'O', 'P'];
+      } else if (fileType === 'png') {
+        route = ['A', 'B', 'I', 'K', 'L', 'M', 'N', 'O', 'P'];
+      }
+
+      if (simInterval) clearInterval(simInterval);
+
+      let step = 0;
+      const indicator = document.getElementById('sim-indicator');
+      const simText = document.getElementById('sim-text');
+      const simTime = document.getElementById('sim-time');
+      let startTime = Date.now();
+
+      indicator.className = 'w-2 h-2 rounded-full bg-accent-emerald animate-pulse';
+      simText.textContent = `Running simulation for .${fileType}...`;
+
+      simInterval = setInterval(() => {
+        if (step >= route.length) {
+          clearInterval(simInterval);
+          simText.textContent = `Completed .${fileType} pipeline!`;
+          indicator.className = 'w-2 h-2 rounded-full bg-brand-400';
+          return;
+        }
+
+        const currentNode = route[step];
+        selectNode(currentNode);
+        renderSVGConnections(route.slice(0, step + 1));
+
+        // Scroll node into smooth view
+        const el = document.getElementById(`node-${currentNode}`);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+        }
+
+        simTime.textContent = `${Date.now() - startTime} ms`;
+        step++;
+      }, 700);
+    }
+
+    function resetSimulation() {
+      if (simInterval) clearInterval(simInterval);
+      document.getElementById('sim-file-select').value = '';
+      document.getElementById('sim-text').textContent = 'Simulator Idle';
+      document.getElementById('sim-time').textContent = '0 ms';
+      document.getElementById('sim-indicator').className = 'w-2 h-2 rounded-full bg-slate-500';
+      
+      document.querySelectorAll('.node-card').forEach(el => {
+        el.classList.remove('ring-2', 'ring-brand-400', 'ring-offset-2', 'ring-offset-slate-950');
+      });
+      document.getElementById('inspector-empty').classList.remove('hidden');
+      document.getElementById('inspector-details').classList.add('hidden');
+      renderSVGConnections();
+    }
+
+    function zoomIn() {
+      currentScale = Math.min(1.5, currentScale + 0.1);
+      applyZoom();
+    }
+
+    function zoomOut() {
+      currentScale = Math.max(0.6, currentScale - 0.1);
+      applyZoom();
+    }
+
+    function resetZoom() {
+      currentScale = 1;
+      applyZoom();
+    }
+
+    function applyZoom() {
+      const wrapper = document.getElementById('diagram-wrapper');
+      wrapper.style.transform = `scale(${currentScale})`;
+      renderSVGConnections();
+    }
+
+    function toggleTheme() {
+      const body = document.getElementById('app-body');
+      const icon = document.getElementById('theme-icon');
+      if (body.classList.contains('dark')) {
+        body.classList.remove('dark');
+        body.classList.add('light', 'bg-slate-50', 'text-slate-900');
+        icon.className = 'fa-solid fa-moon text-xs';
+      } else {
+        body.classList.remove('light', 'bg-slate-50', 'text-slate-900');
+        body.classList.add('dark');
+        icon.className = 'fa-solid fa-sun text-xs';
+      }
+    }
+
+    // Modal logic
+    function openMermaidModal() {
+      document.getElementById('mermaid-modal').classList.remove('hidden');
+    }
+
+    function closeMermaidModal() {
+      document.getElementById('mermaid-modal').classList.add('hidden');
+    }
+
+    function copyMermaidText() {
+      const code = document.getElementById('mermaid-code-text').textContent;
+      document.execCommand('copy');
+      alert('Mermaid graph code copied to clipboard!');
+    }
+
+    function copySnippet() {
+      const snippet = document.getElementById('inspector-code').textContent;
+      document.execCommand('copy');
+    }
+
+    // Window resize observer to update SVG arrow connections
+    window.addEventListener('resize', () => {
+      renderSVGConnections();
+    });
+
+    // Initialize initial view
+    window.onload = function() {
+      setTimeout(() => {
+        renderSVGConnections();
+      }, 100);
+    };
+  </script>
+</body>
+</html>
