@@ -19,6 +19,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   libxext6 \
   libxrender-dev \
   libmagic1 \
+  libxml2-dev \
+  libxslt1-dev \
+  libjpeg-dev \
+  zlib1g-dev \
   poppler-utils \
   tesseract-ocr \
   && rm -rf /var/lib/apt/lists/*
