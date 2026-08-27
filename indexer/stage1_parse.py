@@ -86,7 +86,8 @@ def parse(path: str, tmp_dir: str, docling) -> tuple[list[dict], list[dict]]:
 
 def _parse_via_docling(path: str, tmp_dir: str, docling) -> tuple[list, list]:
     log.info(f"Parsing via Docling: {path}")
-    result = docling.convert_file(path, to_formats=["md", "json"])
+    # Async + polling avoids docling-serve's sync-endpoint wait cap (DOCLING_SERVE_MAX_SYNC_WAIT, default 120s)
+    result = docling.convert_file_with_polling(path, to_formats=["md", "json"])
 
     # Normalise the response envelope (docling-serve returns {"documents": [...]} or {"document": ...})
     documents = result.get("documents", result.get("document"))

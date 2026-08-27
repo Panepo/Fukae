@@ -110,6 +110,66 @@ class DoclingInference:
                 response.raise_for_status()
                 return response.json()
 
+    def convert_file_async(self, path: str, to_formats: list = None, **options) -> str:
+        """
+        Submit a local file conversion task asynchronously via multipart upload.
+
+        Args:
+            path: Local file path to upload.
+            to_formats: Output formats, e.g. ["md", "json"].
+            **options: Extra conversion options forwarded in the JSON options field.
+
+        Returns:
+            The task ID for the conversion task.
+        """
+        if to_formats is None:
+            to_formats = ["md"]
+
+        url = f"{self.base_url}/v1/convert/file/async"
+        content_type = self._get_content_type_from_name(path)
+
+        with open(path, "rb") as f:
+            files = {"files": (Path(path).name, f, content_type)}
+            data = {"options": json.dumps({"to_formats": to_formats, **options})}
+            with httpx.Client(timeout=self.timeout) as client:
+                response = client.post(url, files=files, data=data, headers=self.headers)
+                response.raise_for_status()
+                task_data = response.json()
+                return task_data["task_id"]
+
+    def convert_file_with_polling(self, path: str, to_formats: list = None, poll_interval: float = 5, **options) -> Dict[str, Any]:
+        """
+        Convert a local file asynchronously via multipart upload and poll until completion.
+
+        Bypasses docling-serve's DOCLING_SERVE_MAX_SYNC_WAIT cap on the sync
+        /v1/convert/file endpoint (default 120s), which otherwise returns a 504
+        for slow conversions even though the job keeps running server-side.
+
+        Args:
+            path: Local file path to upload.
+            to_formats: Output formats, e.g. ["md", "json"].
+            poll_interval: Seconds to wait between status polls.
+            **options: Extra conversion options forwarded in the JSON options field.
+
+        Returns:
+            API response dict, same shape as convert_file().
+        """
+        if to_formats is None:
+            to_formats = ["md"]
+
+        task_id = self.convert_file_async(path, to_formats, **options)
+
+        while True:
+            task_status = self.poll_task_status(task_id)
+            task_status_str = task_status.get("task_status", "")
+
+            if task_status_str in ("success", "failure"):
+                break
+
+            time.sleep(poll_interval)
+
+        return self.get_result(task_id)
+
     def convert_document_async(self, source: str, to_formats: list = None, **options) -> str:
         """
         Submit a document conversion task asynchronously.
