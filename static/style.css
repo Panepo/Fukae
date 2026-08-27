@@ -99,3 +99,69 @@ button:hover {
 .result-item a:hover {
   text-decoration: underline;
 }
+
+/* Tab styles */
+.tabs {
+  margin-bottom: 20px;
+}
+
+.tab-button {
+  background-color: #ecf0f1;
+  color: #333;
+  margin-right: 5px;
+  margin-bottom: 10px;
+}
+
+.tab-button.active {
+  background-color: #3498db;
+  color: white;
+}
+
+.tab-button:hover {
+  background-color: #bdc3c7;
+}
+
+.tab-button.active:hover {
+  background-color: #2980b9;
+}
+
+.tab-content {
+  display: none;
+}
+
+.tab-content.active {
+  display: block;
+}
+
+/* File table styles */
+.file-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 20px;
+}
+
+.file-table th,
+.file-table td {
+  padding: 12px;
+  text-align: left;
+  border-bottom: 1px solid #ddd;
+}
+
+.file-table th {
+  background-color: #f8f9fa;
+  font-weight: bold;
+  color: #333;
+}
+
+.file-table tr:hover {
+  background-color: #f5f5f5;
+}
+
+.file-table a {
+  color: #3498db;
+  text-decoration: none;
+}
+
+.file-table a:hover {
+  text-decoration: underline;
+}

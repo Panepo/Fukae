@@ -10,8 +10,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 if __name__ == "__main__":
     print("Starting Document Indexer FastAPI server...")
-    print("Server available at: http://localhost:8000")
-    print("Web UI available at: http://localhost:8000/upload/web")
+    print("Server available at: http://localhost:7800")
+    print("Web UI available at: http://localhost:7800/upload/web")
     print("Press CTRL+C to stop the server.")
 
-    uvicorn.run("api.server:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("api.server:app", host="0.0.0.0", port=7800, reload=True)

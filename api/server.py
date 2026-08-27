@@ -99,10 +99,53 @@ async def download_chunks(doc_stem: str, _: bool = Depends(verify_bearer_key)):
         media_type="application/json"
     )
 
+@app.get("/files/uploads/list")
+async def list_uploads_files(_: bool = Depends(verify_bearer_key)):
+    """List all files in the uploads directory"""
+    files = []
+    for file_path in uploads_dir.iterdir():
+        if file_path.is_file():
+            files.append({
+                "name": file_path.name,
+                "size": file_path.stat().st_size,
+                "modified": file_path.stat().st_mtime
+            })
+    return JSONResponse(content={"files": files})
+
+@app.get("/files/chunks/list")
+async def list_chunks_files(_: bool = Depends(verify_bearer_key)):
+    """List all files in the chunks directory"""
+    files = []
+    for file_path in chunks_dir.iterdir():
+        if file_path.is_file():
+            files.append({
+                "name": file_path.name,
+                "size": file_path.stat().st_size,
+                "modified": file_path.stat().st_mtime
+            })
+    return JSONResponse(content={"files": files})
+
+@app.get("/download/uploads/{filename}")
+async def download_upload_file(filename: str, _: bool = Depends(verify_bearer_key)):
+    """Download a file from the uploads directory"""
+    file_path = uploads_dir / filename
+    if not file_path.exists() or not file_path.is_file():
+        raise HTTPException(status_code=404, detail=f"File not found: {filename}")
+
+    return FileResponse(
+        path=file_path,
+        filename=filename,
+        media_type="application/octet-stream"
+    )
+
 # Web UI endpoints
 @app.get("/upload/web", response_class=HTMLResponse)
 async def upload_web_page(request: Request):
     return templates.TemplateResponse(request, "index.html")
+
+@app.get("/files/web", response_class=HTMLResponse)
+async def files_web_page(request: Request):
+    return templates.TemplateResponse(request, "files.html")
 
 @app.post("/upload/web")
 async def upload_web_file(file: UploadFile = File(...)):
