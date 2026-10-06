@@ -5,6 +5,7 @@ A comprehensive document indexing service that processes, chunks, and embeds doc
 ## Features
 
 - **Multi-format Document Support**: Processes PDF, DOCX, XLSX, PPTX, images (PNG, JPG, JPEG, GIF, BMP, TIFF, WEBP), HTML, and more
+- **PDF Fallback Parsing**: Uses self-hosted MinerU 4 only when Docling fails or returns no usable PDF elements
 - **Six-Stage Processing Pipeline**:
   1. Document parsing with Docling
   2. Table extraction and processing
@@ -172,6 +173,21 @@ The indexer can be configured through the `indexer/config.py` file:
 - `CHUNK_SIZE`: Size of document chunks
 - `CHUNK_OVERLAP`: Overlap between consecutive chunks
 - `VLM_TEMPERATURE`: Temperature setting for Vision Language Models
+- `MINERU_BASE_URL`: Optional internal MinerU V1 endpoint. When unset, PDFs use Docling only.
+- `MINERU_API_KEY`: Optional MinerU V1 bearer key for deployments that require it.
+- `MINERU_TIER`: MinerU parsing tier, normally `standard`.
+- `MINERU_POLL_INTERVAL` / `MINERU_POLL_TIMEOUT`: MinerU job polling bounds in seconds.
+
+### MinerU Deployment
+
+The GX10 Petallia reference Compose deployment starts MinerU as an internal service at
+`http://mineru:8000`; it does not publish MinerU's port to the host. Docling remains the
+primary parser. MinerU is used for PDFs only after a Docling transport error, terminal
+failure, malformed response, or zero usable elements.
+
+Build the `mineru:4.0.10` image from the official MinerU 4 NVIDIA Dockerfile and verify
+the installed MinerU version is exactly `4.0.10` before starting Compose. The official
+build can otherwise resolve a floating 4.x package range.
 
 ## Testing
 

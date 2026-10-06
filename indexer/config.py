@@ -2,6 +2,8 @@ import os
 
 # --- From environment ---
 SERVER_TIMEOUT = float(os.getenv("SERVER_TIMEOUT", "180"))
+MINERU_POLL_INTERVAL = float(os.getenv("MINERU_POLL_INTERVAL", "1"))
+MINERU_POLL_TIMEOUT = float(os.getenv("MINERU_POLL_TIMEOUT", "1800"))
 CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", "1024"))
 CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", "128"))
 VLM_TEMPERATURE = float(os.getenv("VLM_TEMPERATURE", "0.1"))

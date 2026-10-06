@@ -8,8 +8,11 @@ import logging
 import mimetypes
 import sys
 import tempfile
+import zipfile
 from pathlib import Path
 from typing import Any
+
+from core.mineru import MinerUError, MinerUResult
 
 logging.basicConfig(
     level=logging.INFO,
@@ -46,7 +49,11 @@ _IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".tiff", ".webp"}
 # Public entry point
 # ---------------------------------------------------------------------------
 
-def parse(path: str, tmp_dir: str, docling) -> tuple[list[dict], list[dict]]:
+class ParserError(RuntimeError):
+    """Raised when a document cannot be converted into usable elements."""
+
+
+def parse(path: str, tmp_dir: str, docling, mineru=None) -> tuple[list[dict], list[dict]]:
     """
     Convert *path* into a flat list of elements and a list of pic_info dicts.
 
@@ -64,6 +71,8 @@ def parse(path: str, tmp_dir: str, docling) -> tuple[list[dict], list[dict]]:
     log.info(f"Parsing document: {path}")
     suffix = Path(path).suffix.lower()
 
+    if suffix == ".pdf":
+        return _parse_pdf(path, tmp_dir, docling, mineru)
     if suffix in _DOCLING_EXTENSIONS:
         return _parse_via_docling(path, tmp_dir, docling)
     if suffix in _EXCEL_EXTENSIONS:
@@ -84,12 +93,36 @@ def parse(path: str, tmp_dir: str, docling) -> tuple[list[dict], list[dict]]:
 # Docling path
 # ---------------------------------------------------------------------------
 
+def _parse_pdf(path: str, tmp_dir: str, docling, mineru) -> tuple[list, list]:
+    """Use Docling first, then the configured MinerU service for unusable PDFs."""
+    try:
+        elements, pic_info = _parse_via_docling(path, tmp_dir, docling)
+        if elements:
+            return elements, pic_info
+        raise ParserError("Docling returned zero usable elements")
+    except Exception as docling_error:
+        if mineru is None or not mineru.enabled:
+            raise ParserError(f"Docling PDF parsing failed: {docling_error}") from docling_error
+        log.warning("Docling PDF parsing failed; trying MinerU fallback: %s", type(docling_error).__name__)
+        try:
+            result = mineru.parse_pdf(path)
+            elements, pic_info = _parse_mineru_result(result, tmp_dir)
+            if elements:
+                return elements, pic_info
+            raise ParserError("MinerU returned zero usable elements")
+        except Exception as mineru_error:
+            raise ParserError(
+                f"PDF parsing failed with Docling ({type(docling_error).__name__}) and MinerU ({type(mineru_error).__name__})"
+            ) from mineru_error
+
 def _parse_via_docling(path: str, tmp_dir: str, docling) -> tuple[list, list]:
     log.info(f"Parsing via Docling: {path}")
     # Async + polling avoids docling-serve's sync-endpoint wait cap (DOCLING_SERVE_MAX_SYNC_WAIT, default 120s)
     result = docling.convert_file_with_polling(path, to_formats=["md", "json"])
 
     # Normalise the response envelope (docling-serve returns {"documents": [...]} or {"document": ...})
+    if not isinstance(result, dict):
+        raise ParserError("Docling returned a malformed response envelope")
     documents = result.get("documents", result.get("document"))
     if isinstance(documents, list):
         doc = documents[0] if documents else {}
@@ -106,6 +139,129 @@ def _parse_via_docling(path: str, tmp_dir: str, docling) -> tuple[list, list]:
     # Fallback: parse the markdown text when JSON is unavailable
     md_content = doc.get("md_content") or doc.get("text", "")
     return _parse_markdown_text(md_content), []
+
+
+def _parse_mineru_result(result: MinerUResult, tmp_dir: str) -> tuple[list, list]:
+    """Normalize MinerU structured pages into the existing Stage 1 contract."""
+    if result.structured_content is not None:
+        return _parse_mineru_structured_content(result.structured_content, result.zip_bytes, tmp_dir)
+    if result.markdown is not None:
+        return _parse_markdown_text(result.markdown), []
+    raise ParserError("MinerU returned neither structured content nor markdown")
+
+
+def _parse_mineru_structured_content(content: dict | list, zip_bytes: bytes | None, tmp_dir: str) -> tuple[list, list]:
+    image_paths = _extract_mineru_images(zip_bytes, tmp_dir)
+    elements: list[dict] = []
+    pic_info: list[dict] = []
+    current_section = ""
+
+    for page_index, block in _iter_mineru_blocks(content):
+        block_type = str(block.get("type", block.get("block_type", "text"))).lower()
+        page = _mineru_page_number(block, page_index)
+        text = _mineru_block_text(block)
+
+        if block_type in {"title", "heading", "section_header", "header"}:
+            current_section = text
+            if text:
+                elements.append({"type": "heading", "text": text, "page": page, "section": current_section})
+        elif block_type in {"table", "table_body"}:
+            table_data = _mineru_table_data(block)
+            elements.append({"type": "table", "text": text, "page": page, "section": current_section,
+                             "table_data": table_data, "rows": table_data["num_rows"], "cols": table_data["num_cols"]})
+        elif block_type in {"image", "picture", "figure", "image_body"}:
+            element_id = str(block.get("id", block.get("block_id", f"mineru_picture_{len(pic_info)}")))
+            image_path = _mineru_image_path(block, image_paths)
+            caption = str(block.get("caption", text))
+            mime_type = mimetypes.guess_type(image_path or "")[0] or "image/png"
+            pic_info.append({"element_id": element_id, "image_path": image_path, "page": page,
+                             "section": current_section, "caption": caption, "mime_type": mime_type})
+            elements.append({"type": "picture", "text": caption, "page": page, "section": current_section,
+                             "element_id": element_id})
+        elif block_type in {"list", "list_item", "list_body"}:
+            if text:
+                elements.append({"type": "list_item", "text": text, "page": page, "section": current_section})
+        elif block_type in {"code", "code_block"}:
+            if text:
+                elements.append({"type": "code", "text": text, "page": page, "section": current_section})
+        elif text:
+            elements.append({"type": "text", "text": text, "page": page, "section": current_section})
+
+    return elements, pic_info
+
+
+def _iter_mineru_blocks(content: dict | list):
+    pages = content.get("pages") if isinstance(content, dict) else content
+    if not isinstance(pages, list) and isinstance(content, dict):
+        pages = content.get("content") or content.get("blocks")
+    if not isinstance(pages, list):
+        raise ParserError("MinerU structured content has no page or block list")
+    for page_index, page in enumerate(pages):
+        if not isinstance(page, dict):
+            continue
+        blocks = page.get("blocks", page.get("content", []))
+        if "type" in page and not isinstance(blocks, list):
+            blocks = [page]
+        if not isinstance(blocks, list):
+            continue
+        for block in blocks:
+            if isinstance(block, dict):
+                yield page_index, block
+
+
+def _mineru_page_number(block: dict, page_index: int) -> int:
+    value = block.get("page_no", block.get("page_number", page_index))
+    try:
+        return int(value) + 1
+    except (TypeError, ValueError):
+        return page_index + 1
+
+
+def _mineru_block_text(block: dict) -> str:
+    for key in ("text", "content", "markdown", "title"):
+        value = block.get(key)
+        if isinstance(value, str):
+            return value.strip()
+    return ""
+
+
+def _mineru_table_data(block: dict) -> dict:
+    data = block.get("table_data")
+    if isinstance(data, dict) and {"num_rows", "num_cols", "table_cells"} <= set(data):
+        return data
+    rows = block.get("rows", block.get("table", []))
+    if isinstance(rows, list) and all(isinstance(row, list) for row in rows):
+        return _rows_to_table_data(rows)
+    return {"num_rows": 0, "num_cols": 0, "table_cells": []}
+
+
+def _extract_mineru_images(zip_bytes: bytes | None, tmp_dir: str) -> dict[str, str]:
+    if not zip_bytes:
+        return {}
+    image_paths: dict[str, str] = {}
+    try:
+        with zipfile.ZipFile(__import__("io").BytesIO(zip_bytes)) as archive:
+            for name in archive.namelist():
+                mime_type = mimetypes.guess_type(name)[0]
+                if name.endswith("/") or not (mime_type and mime_type.startswith("image/")):
+                    continue
+                safe_name = Path(name).name
+                target = os.path.join(tmp_dir, f"mineru_{safe_name}")
+                with open(target, "wb") as output:
+                    output.write(archive.read(name))
+                image_paths[name] = target
+                image_paths[safe_name] = target
+    except (OSError, zipfile.BadZipFile) as exc:
+        raise ParserError("MinerU ZIP artifact is invalid") from exc
+    return image_paths
+
+
+def _mineru_image_path(block: dict, image_paths: dict[str, str]) -> str | None:
+    for key in ("image_path", "img_path", "path"):
+        value = block.get(key)
+        if isinstance(value, str):
+            return image_paths.get(value) or image_paths.get(Path(value).name)
+    return None
 
 
 def _parse_docling_json(doc_json: dict, tmp_dir: str) -> tuple[list, list]:

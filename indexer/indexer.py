@@ -6,8 +6,12 @@ from pathlib import Path
 
 from core.docling import DoclingInference
 from core.llm import LLMInference
+from core.mineru import MinerUInference
 from core.vlm import VLMInference
-from indexer.config import SERVER_TIMEOUT, CHUNK_SIZE, CHUNK_OVERLAP, VLM_TEMPERATURE
+from indexer.config import (
+    SERVER_TIMEOUT, CHUNK_SIZE, CHUNK_OVERLAP, MINERU_POLL_INTERVAL,
+    MINERU_POLL_TIMEOUT, VLM_TEMPERATURE,
+)
 from indexer import stage1_parse, stage2_tables, stage3_vision, stage4_chunk, stage5_metadata, stage6_embed
 from indexer.chunk_utils import _build_rcts
 from indexer.metadata_utils import _detect_language, _chunk_hash
@@ -35,6 +39,11 @@ class DocumentIndexer:
 
     def __init__(self):
         self.docling = DoclingInference(timeout=SERVER_TIMEOUT)
+        self.mineru = MinerUInference(
+            timeout=SERVER_TIMEOUT,
+            poll_interval=MINERU_POLL_INTERVAL,
+            poll_timeout=MINERU_POLL_TIMEOUT,
+        )
         self.llm = LLMInference()
         self.vlm = VLMInference(temperature=VLM_TEMPERATURE)
         self.chunk_size = CHUNK_SIZE
@@ -104,7 +113,7 @@ class DocumentIndexer:
         with tempfile.TemporaryDirectory() as tmp_dir:
             tmp_path = Path(tmp_dir)
             # Stage 1
-            elements, pic_info = stage1_parse.parse(path, tmp_dir, self.docling)
+            elements, pic_info = stage1_parse.parse(path, tmp_dir, self.docling, self.mineru)
 
             # Stage 2 + 3 in parallel (both are read-only w.r.t. elements)
             with ThreadPoolExecutor(max_workers=2) as pool:
