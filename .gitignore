@@ -185,3 +185,6 @@ cython_debug/
 tests/*.pdf
 uploads/*.*
 chunks/*.*
+frontend/node_modules/
+frontend/coverage/
+static/app/

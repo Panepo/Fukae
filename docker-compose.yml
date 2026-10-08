@@ -3,9 +3,11 @@ services:
     image: fukae:latest
     container_name: fukae
     build:
-      context: ..
+      context: .
       dockerfile: Dockerfile
     restart: unless-stopped
+    ports:
+      - "7800:7800"
     depends_on:
       - docling-serve
     environment:

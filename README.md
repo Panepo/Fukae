@@ -15,7 +15,7 @@ A comprehensive document indexing service that processes, chunks, and embeds doc
   6. Vector embedding generation
 - **FastAPI REST API**: Upload documents, check processing status, and retrieve chunks
 - **Bearer Token Authentication**: Secure API endpoints
-- **Web UI**: User-friendly interface for document upload and management
+- **Vue Web UI**: Session-scoped bearer-key access to document indexing and file management
 - **Asynchronous Processing**: Background task processing for document analysis
 
 ## Project Structure
@@ -49,8 +49,8 @@ fukae/
 │   ├── table_utils.py     # Table processing utilities
 │   └── vision_utils.py    # Vision processing utilities
 ├── scripts/               # Utility scripts
-├── static/                # Static assets (CSS, JS, images)
-├── templates/             # HTML templates for web UI
+├── frontend/              # Vue/Vite application source
+├── static/app/            # Built Vue assets (generated during build)
 ├── tests/                 # Test suite
 ├── uploads/               # Temporary upload directory
 ├── main.py                # Application entry point
@@ -85,6 +85,16 @@ fukae/
    BEARER_KEY=your_secure_api_key_here
    # Add other environment variables as needed for LLM, embedding, and VLM services
    ```
+
+4. Install the frontend dependencies and start the API and Vite development servers in separate terminals:
+  ```bash
+  cd frontend
+  npm install
+  npm run dev
+  ```
+
+  Run `python main.py` from the project root for the API. Vite proxies API requests to
+  `http://localhost:7800`; the production FastAPI process serves the compiled SPA.
 
 ### Docker Deployment
 
@@ -162,8 +172,17 @@ curl -X GET "http://localhost:8000/download/chunks/{doc_stem}_chunks.json" \
 
 ### Web UI
 
-Access the web interface at:
-- `http://localhost:8000/upload/web`
+In development, access the Vite application at `http://localhost:5173`.
+
+For production, build the application and access FastAPI at `http://localhost:7800`:
+
+```bash
+cd frontend
+npm run build
+```
+
+The application asks for a bearer key and stores a verified key in browser session storage.
+The former `/upload/web` and `/files/web` routes have been removed.
 
 ## Configuration
 

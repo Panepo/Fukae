@@ -1,3 +1,14 @@
+# Build the production Vue application without committing compiled assets.
+FROM node:24-bookworm-slim AS frontend-build
+
+WORKDIR /app/frontend
+
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
+
+COPY frontend ./
+RUN npm run build
+
 # Use Python 3.13.3 slim image as the base
 FROM python:3.13.3-slim
 
@@ -35,12 +46,13 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy project files
 COPY . .
+COPY --from=frontend-build /app/static/app ./static/app
 
 # Create necessary directories
 RUN mkdir -p chunks uploads
 
 # Expose the port the app runs on
-EXPOSE 8000
+EXPOSE 7800
 
 # Command to run the application
 CMD ["python", "main.py"]

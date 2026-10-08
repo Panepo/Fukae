@@ -1,7 +1,6 @@
 from fastapi import FastAPI, File, UploadFile, HTTPException, Depends, Request
-from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
+from fastapi.responses import JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
 from pathlib import Path
 import shutil
 import asyncio
@@ -19,9 +18,12 @@ chunks_dir.mkdir(exist_ok=True)
 uploads_dir = Path("uploads")
 uploads_dir.mkdir(exist_ok=True)
 
-# Mount static files and templates
+# Mount static files and the compiled Vue assets.
 app.mount("/static", StaticFiles(directory="static"), name="static")
-templates = Jinja2Templates(directory="templates")
+frontend_dir = Path("static/app")
+frontend_assets_dir = frontend_dir / "assets"
+if frontend_assets_dir.exists():
+    app.mount("/assets", StaticFiles(directory=frontend_assets_dir), name="frontend-assets")
 
 # Bearer key authentication
 load_dotenv()
@@ -38,6 +40,10 @@ def verify_bearer_key(request: Request):
     return True
 
 # Endpoints for HTTP API
+@app.get("/auth/verify")
+async def verify_authentication(_: bool = Depends(verify_bearer_key)):
+    return {"authenticated": True}
+
 @app.post("/upload", response_model=UploadResponse)
 async def upload_file(file: UploadFile = File(...), _: bool = Depends(verify_bearer_key)):
     task_id = task_manager.create_task()
@@ -138,29 +144,9 @@ async def download_upload_file(filename: str, _: bool = Depends(verify_bearer_ke
         media_type="application/octet-stream"
     )
 
-# Web UI endpoints
-@app.get("/upload/web", response_class=HTMLResponse)
-async def upload_web_page(request: Request):
-    return templates.TemplateResponse(request, "index.html")
-
-@app.get("/files/web", response_class=HTMLResponse)
-async def files_web_page(request: Request):
-    return templates.TemplateResponse(request, "files.html")
-
-@app.post("/upload/web")
-async def upload_web_file(file: UploadFile = File(...)):
-    task_id = task_manager.create_task()
-
-    # Save uploaded file temporarily
-    file_path = uploads_dir / file.filename
-    with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-
-    # Start processing in background
-    asyncio.create_task(task_manager.process_document(task_id, file_path, chunks_dir))
-
-    return JSONResponse(content={
-        "task_id": task_id,
-        "status": "pending",
-        "message": "File upload received and processing started"
-    })
+@app.get("/")
+async def serve_frontend():
+    index_file = frontend_dir / "index.html"
+    if not index_file.exists():
+        raise HTTPException(status_code=404, detail="Frontend build not found")
+    return FileResponse(index_file)
