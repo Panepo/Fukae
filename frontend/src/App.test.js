@@ -1,6 +1,7 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import App from './App.vue'
+import FileList from './FileList.vue'
 import { clearStoredKey, createApiClient, loadStoredKey, storeKey } from './api'
 
 function response(ok, body = {}) {
@@ -54,5 +55,21 @@ describe('Fukae credential gate', () => {
     expect(globalThis.fetch.mock.calls[0][1].headers.get('Authorization')).toBe('Bearer valid-key')
     expect(loadStoredKey()).toBeNull()
     expect(onUnauthorized).toHaveBeenCalledOnce()
+  })
+
+  it('emits the managed directory and filename for deletion', async () => {
+    const wrapper = mount(FileList, {
+      props: {
+        heading: 'Uploads',
+        directory: 'uploads',
+        files: [{ name: 'document.pdf', size: 10, modified: 0 }],
+        formatSize: () => '10 B',
+        formatModified: () => 'now',
+      },
+    })
+
+    await wrapper.get('.delete-button').trigger('click')
+
+    expect(wrapper.emitted('delete')).toEqual([['uploads', 'document.pdf']])
   })
 })

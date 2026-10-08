@@ -231,6 +231,15 @@ th {
   text-decoration: underline;
 }
 
+.file-actions {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.delete-button {
+  color: #a61b35;
+}
+
 @media (max-width: 540px) {
   .app-shell {
     margin: 2rem auto;

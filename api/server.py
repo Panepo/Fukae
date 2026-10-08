@@ -131,6 +131,20 @@ async def list_chunks_files(_: bool = Depends(verify_bearer_key)):
             })
     return JSONResponse(content={"files": files})
 
+@app.delete("/files/{directory}/{filename}")
+async def delete_managed_file(directory: str, filename: str, _: bool = Depends(verify_bearer_key)):
+    directories = {"uploads": uploads_dir, "chunks": chunks_dir}
+    target_directory = directories.get(directory)
+    if target_directory is None or Path(filename).name != filename:
+        raise HTTPException(status_code=404, detail="File not found")
+
+    file_path = target_directory / filename
+    if not file_path.is_file():
+        raise HTTPException(status_code=404, detail=f"File not found: {filename}")
+
+    file_path.unlink()
+    return {"deleted": filename}
+
 @app.get("/download/uploads/{filename}")
 async def download_upload_file(filename: str, _: bool = Depends(verify_bearer_key)):
     """Download a file from the uploads directory"""

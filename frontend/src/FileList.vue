@@ -7,9 +7,10 @@ const props = defineProps({
   files: { type: Array, required: true },
   formatSize: { type: Function, required: true },
   formatModified: { type: Function, required: true },
+  deletingFile: { type: String, default: '' },
 })
 
-const emit = defineEmits(['download'])
+const emit = defineEmits(['download', 'delete'])
 const sortKey = ref('name')
 const sortDirection = ref('asc')
 
@@ -57,7 +58,10 @@ function ariaSort(column) {
             <td>{{ file.name }}</td>
             <td>{{ formatSize(file.size) }}</td>
             <td>{{ formatModified(file.modified) }}</td>
-            <td><button class="link-button" type="button" @click="emit('download', directory, file.name)">Download</button></td>
+            <td class="file-actions">
+              <button class="link-button" type="button" @click="emit('download', directory, file.name)">Download</button>
+              <button class="link-button delete-button" type="button" :disabled="deletingFile === `${directory}/${file.name}`" @click="emit('delete', directory, file.name)">{{ deletingFile === `${directory}/${file.name}` ? 'Deleting...' : 'Delete' }}</button>
+            </td>
           </tr>
         </tbody>
       </table>

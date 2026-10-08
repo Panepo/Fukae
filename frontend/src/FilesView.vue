@@ -11,6 +11,7 @@ const uploads = ref([])
 const chunks = ref([])
 const loading = ref(false)
 const error = ref('')
+const deletingFile = ref('')
 
 function formatSize(bytes) {
   if (bytes === 0) return '0 B'
@@ -56,6 +57,22 @@ async function download(directory, filename) {
   }
 }
 
+async function deleteFile(directory, filename) {
+  if (!window.confirm(`Delete "${filename}"? This cannot be undone.`)) return
+
+  deletingFile.value = `${directory}/${filename}`
+  error.value = ''
+  try {
+    const response = await props.api.request(`/files/${directory}/${encodeURIComponent(filename)}`, { method: 'DELETE' })
+    if (!response.ok) throw new Error(`Delete failed (${response.status}).`)
+    await loadFiles()
+  } catch (requestError) {
+    if (!(requestError instanceof AuthenticationError)) error.value = requestError.message
+  } finally {
+    deletingFile.value = ''
+  }
+}
+
 onMounted(loadFiles)
 </script>
 
@@ -72,8 +89,8 @@ onMounted(loadFiles)
     <p v-else-if="loading" class="message">Loading files...</p>
 
     <div v-else class="file-groups">
-      <FileList heading="Uploads" directory="uploads" :files="uploads" :format-size="formatSize" :format-modified="formatModified" @download="download" />
-      <FileList heading="Chunks" directory="chunks" :files="chunks" :format-size="formatSize" :format-modified="formatModified" @download="download" />
+      <FileList heading="Uploads" directory="uploads" :files="uploads" :format-size="formatSize" :format-modified="formatModified" :deleting-file="deletingFile" @download="download" @delete="deleteFile" />
+      <FileList heading="Chunks" directory="chunks" :files="chunks" :format-size="formatSize" :format-modified="formatModified" :deleting-file="deletingFile" @download="download" @delete="deleteFile" />
     </div>
   </section>
 </template>
