@@ -90,14 +90,14 @@ async function downloadChunks(docStem) {
       <label for="documents">Documents</label>
       <input id="documents" ref="fileInput" type="file" multiple :accept="supportedTypes" :disabled="uploading" />
       <p v-if="error" class="message error" role="alert">{{ error }}</p>
-      <button type="submit" :disabled="uploading">{{ uploading ? 'Processing...' : 'Upload and process' }}</button>
+      <button class="filled-button" type="submit" :disabled="uploading">{{ uploading ? 'Processing...' : 'Upload and process' }}</button>
     </form>
 
     <div v-if="entries.length" class="job-list" aria-live="polite">
       <article v-for="entry in entries" :key="`${entry.name}-${entry.taskId}`" class="job-row">
         <div class="job-summary">
           <strong>{{ entry.name }}</strong>
-          <span>{{ entry.status }}</span>
+          <span class="status-chip">{{ entry.status }}</span>
         </div>
         <div class="progress-track" :aria-label="`${entry.name} progress`">
           <div class="progress-fill" :style="{ width: `${entry.progress}%` }"></div>

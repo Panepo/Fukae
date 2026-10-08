@@ -65,24 +65,24 @@ onMounted(async () => {
     </section>
 
     <section v-else-if="!authenticated" class="credential-panel">
-      <p class="eyebrow">Document indexing</p>
+      <p class="eyebrow">Document intelligence</p>
       <h1>Fukae</h1>
       <p>Enter a bearer key to access indexing and file management.</p>
       <form @submit.prevent="submitKey">
         <label for="bearer-key">Bearer key</label>
         <input id="bearer-key" v-model="key" type="password" autocomplete="off" :disabled="submitting" />
         <p v-if="error" class="message error" role="alert">{{ error }}</p>
-        <button type="submit" :disabled="submitting">{{ submitting ? 'Verifying...' : 'Continue' }}</button>
+        <button class="filled-button" type="submit" :disabled="submitting">{{ submitting ? 'Verifying...' : 'Continue' }}</button>
       </form>
     </section>
 
     <template v-else>
       <header class="app-header">
         <div>
-          <p class="eyebrow">Document indexing</p>
+          <p class="eyebrow">Document intelligence</p>
           <h1>Fukae</h1>
         </div>
-        <button class="secondary-button" type="button" @click="signOut">Sign out</button>
+        <button class="text-button" type="button" @click="signOut">Sign out</button>
       </header>
 
       <nav class="tabs" aria-label="Application sections">

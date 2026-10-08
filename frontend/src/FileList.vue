@@ -47,9 +47,9 @@ function ariaSort(column) {
       <table>
         <thead>
           <tr>
-            <th :aria-sort="ariaSort('name')" scope="col"><button class="sort-button" type="button" @click="sortBy('name')">Name <span v-if="sortKey === 'name'">{{ sortDirection }}</span></button></th>
-            <th :aria-sort="ariaSort('size')" scope="col"><button class="sort-button" type="button" @click="sortBy('size')">Size <span v-if="sortKey === 'size'">{{ sortDirection }}</span></button></th>
-            <th :aria-sort="ariaSort('modified')" scope="col"><button class="sort-button" type="button" @click="sortBy('modified')">Modified <span v-if="sortKey === 'modified'">{{ sortDirection }}</span></button></th>
+            <th :aria-sort="ariaSort('name')" scope="col"><button class="sort-button" type="button" :aria-label="`Sort by name, ${ariaSort('name')}`" @click="sortBy('name')">Name <span v-if="sortKey === 'name'" aria-hidden="true">{{ sortDirection === 'asc' ? '&uarr;' : '&darr;' }}</span></button></th>
+            <th :aria-sort="ariaSort('size')" scope="col"><button class="sort-button" type="button" :aria-label="`Sort by size, ${ariaSort('size')}`" @click="sortBy('size')">Size <span v-if="sortKey === 'size'" aria-hidden="true">{{ sortDirection === 'asc' ? '&uarr;' : '&darr;' }}</span></button></th>
+            <th :aria-sort="ariaSort('modified')" scope="col"><button class="sort-button" type="button" :aria-label="`Sort by modified date, ${ariaSort('modified')}`" @click="sortBy('modified')">Modified <span v-if="sortKey === 'modified'" aria-hidden="true">{{ sortDirection === 'asc' ? '&uarr;' : '&darr;' }}</span></button></th>
             <th scope="col">Action</th>
           </tr>
         </thead>
